@@ -5,6 +5,10 @@ const audio = new Audio();
 const bundledTracks = [];
 let tracks = [...bundledTracks];
 let current = -1;
+let shuffleEnabled = false;
+let repeatMode = 'all';
+let searchQuery = '';
+let favoritesOnly = false;
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -18,11 +22,46 @@ const elements = {
   fileInput: document.querySelector('#song-files'),
   playlist: document.querySelector('#playlist-list'),
   emptyPlaylist: document.querySelector('#empty-playlist'),
+  noResults: document.querySelector('#no-results'),
   songCount: document.querySelector('#song-count'),
   clear: document.querySelector('#clear-playlist'),
   coverInitial: document.querySelector('#cover-initial'),
-  themeLabel: document.querySelector('#theme-label')
+  themeLabel: document.querySelector('#theme-label'),
+  favoriteCurrent: document.querySelector('#favorite-current'),
+  favoritesFilter: document.querySelector('#show-favorites'),
+  search: document.querySelector('#playlist-search'),
+  shuffle: document.querySelector('#shuffle'),
+  repeat: document.querySelector('#repeat'),
+  volume: document.querySelector('#volume'),
+  volumeValue: document.querySelector('#volume-value')
 };
+
+function readFavorites() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('nh48-favorites') || '[]');
+    return new Set(Array.isArray(stored) ? stored : []);
+  } catch {
+    return new Set();
+  }
+}
+
+const favoriteKeys = readFavorites();
+
+function saveFavorites() {
+  try {
+    localStorage.setItem('nh48-favorites', JSON.stringify([...favoriteKeys]));
+  } catch {
+    setMessage('Favorites work for this session, but could not be saved.');
+  }
+}
+
+function trackKey(track) {
+  return track.key || track.url;
+}
+
+function isFavorite(track) {
+  return favoriteKeys.has(trackKey(track));
+}
 
 function formatTime(seconds) {
   if (!Number.isFinite(seconds)) return '0:00';
@@ -46,21 +85,51 @@ function setTheme(theme) {
   document.querySelector('#theme-toggle').setAttribute('aria-label', `Switch to ${neon ? 'night' : 'neon'} theme`);
 }
 
+function updateFavoriteCurrent() {
+  const track = tracks[current];
+  const favorite = Boolean(track && isFavorite(track));
+  elements.favoriteCurrent.disabled = !track;
+  elements.favoriteCurrent.setAttribute('aria-pressed', String(favorite));
+  elements.favoriteCurrent.setAttribute('aria-label', track
+    ? `${favorite ? 'Remove' : 'Add'} ${track.title} ${favorite ? 'from' : 'to'} favorites`
+    : 'Add current song to favorites');
+}
+
+function createHeartIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  path.setAttribute('d', 'M12 20.4 4.3 13A5.1 5.1 0 0 1 11.5 5.8l.5.5.5-.5a5.1 5.1 0 0 1 7.2 7.2z');
+  svg.append(path);
+  return svg;
+}
+
 function renderPlaylist() {
   elements.playlist.replaceChildren();
-  tracks.forEach((track, index) => {
+  const visibleTracks = tracks
+    .map((track, index) => ({ track, index }))
+    .filter(({ track }) => {
+      const matchesSearch = `${track.title} ${track.artist}`.toLowerCase().includes(searchQuery);
+      return matchesSearch && (!favoritesOnly || isFavorite(track));
+    });
+
+  visibleTracks.forEach(({ track, index }) => {
     const item = document.createElement('li');
-    const button = document.createElement('button');
+    const playButton = document.createElement('button');
     const number = document.createElement('span');
     const copy = document.createElement('span');
     const trackTitle = document.createElement('span');
     const trackArtist = document.createElement('span');
     const bars = document.createElement('span');
+    const favoriteButton = document.createElement('button');
+    const favorite = isFavorite(track);
 
-    button.type = 'button';
-    button.className = `playlist-item${index === current ? ' active' : ''}`;
-    button.dataset.index = String(index);
-    button.setAttribute('aria-label', `Play ${track.title}`);
+    item.className = 'playlist-row';
+    playButton.type = 'button';
+    playButton.className = `playlist-item${index === current ? ' active' : ''}`;
+    playButton.dataset.index = String(index);
+    playButton.setAttribute('aria-label', `Play ${track.title}`);
     number.className = 'track-number';
     number.textContent = String(index + 1).padStart(2, '0');
     copy.className = 'playlist-copy';
@@ -72,15 +141,26 @@ function renderPlaylist() {
     bars.setAttribute('aria-hidden', 'true');
     bars.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
     copy.append(trackTitle, trackArtist);
-    button.append(number, copy, bars);
-    item.append(button);
+    playButton.append(number, copy, bars);
+
+    favoriteButton.type = 'button';
+    favoriteButton.className = 'favorite-track';
+    favoriteButton.dataset.favoriteIndex = String(index);
+    favoriteButton.setAttribute('aria-pressed', String(favorite));
+    favoriteButton.setAttribute('aria-label', `${favorite ? 'Remove' : 'Add'} ${track.title} ${favorite ? 'from' : 'to'} favorites`);
+    favoriteButton.append(createHeartIcon());
+
+    item.append(playButton, favoriteButton);
     elements.playlist.append(item);
   });
 
-  elements.emptyPlaylist.hidden = tracks.length > 0;
-  elements.playlist.hidden = tracks.length === 0;
-  elements.clear.disabled = tracks.length === 0;
+  const hasTracks = tracks.length > 0;
+  elements.emptyPlaylist.hidden = hasTracks;
+  elements.playlist.hidden = !hasTracks || visibleTracks.length === 0;
+  elements.noResults.hidden = !hasTracks || visibleTracks.length > 0;
+  elements.clear.disabled = !hasTracks;
   elements.songCount.textContent = `${tracks.length} ${tracks.length === 1 ? 'SONG' : 'SONGS'}`;
+  updateFavoriteCurrent();
 }
 
 function loadTrack(index, shouldPlay = false) {
@@ -102,9 +182,45 @@ function loadTrack(index, shouldPlay = false) {
   setMessage(`Track ${current + 1} of ${tracks.length}`);
   renderPlaylist();
 
-  if (shouldPlay) {
-    audio.play().catch(() => setMessage('Press play to continue.'));
+  if (shouldPlay) audio.play().catch(() => setMessage('Press play to continue.'));
+}
+
+function getNextIndex() {
+  if (!tracks.length) return -1;
+  if (repeatMode === 'one') return current;
+  if (current >= tracks.length - 1 && repeatMode === 'off') return -1;
+  if (shuffleEnabled && tracks.length > 1) {
+    let next = current;
+    while (next === current) next = Math.floor(Math.random() * tracks.length);
+    return next;
   }
+  return current < tracks.length - 1 ? current + 1 : 0;
+}
+
+function playNext() {
+  const next = getNextIndex();
+  if (next === -1) {
+    audio.pause();
+    setMessage('You reached the end of the queue.');
+    return;
+  }
+  loadTrack(next, true);
+}
+
+function playPrevious() {
+  if (!tracks.length) return;
+  if (audio.currentTime > 3) {
+    audio.currentTime = 0;
+    return;
+  }
+  if (shuffleEnabled && tracks.length > 1) {
+    let previous = current;
+    while (previous === current) previous = Math.floor(Math.random() * tracks.length);
+    loadTrack(previous, !audio.paused);
+    return;
+  }
+  const previous = current > 0 ? current - 1 : (repeatMode === 'all' ? tracks.length - 1 : 0);
+  loadTrack(previous, !audio.paused);
 }
 
 function togglePlayback() {
@@ -125,7 +241,7 @@ function addFiles(files) {
     return;
   }
 
-  const existingKeys = new Set(tracks.map(track => track.key).filter(Boolean));
+  const existingKeys = new Set(tracks.map(trackKey));
   const additions = selected
     .filter(file => !existingKeys.has(`${file.name}-${file.size}-${file.lastModified}`))
     .map((file, index) => ({
@@ -148,6 +264,16 @@ function addFiles(files) {
   if (current === -1) loadTrack(0, false);
 }
 
+function toggleFavorite(index) {
+  const track = tracks[index];
+  if (!track) return;
+  const key = trackKey(track);
+  if (favoriteKeys.has(key)) favoriteKeys.delete(key);
+  else favoriteKeys.add(key);
+  saveFavorites();
+  renderPlaylist();
+}
+
 function clearPlaylist() {
   audio.pause();
   audio.removeAttribute('src');
@@ -167,6 +293,8 @@ function clearPlaylist() {
   setMessage('Playlist cleared. Select songs to start again.');
   if (tracks.length) loadTrack(0, false);
 }
+
+audio.volume = Number(elements.volume.value) / 100;
 
 audio.addEventListener('loadedmetadata', () => {
   elements.duration.textContent = formatTime(audio.duration);
@@ -191,9 +319,7 @@ audio.addEventListener('pause', () => {
   renderPlaylist();
 });
 
-audio.addEventListener('ended', () => {
-  if (tracks.length) loadTrack(current + 1, true);
-});
+audio.addEventListener('ended', playNext);
 
 audio.addEventListener('error', () => {
   if (audio.src) setMessage('This file could not be played. Try another audio format.');
@@ -205,16 +331,49 @@ elements.fileInput.addEventListener('change', () => {
   elements.fileInput.value = '';
 });
 elements.playlist.addEventListener('click', event => {
-  const button = event.target.closest('.playlist-item');
-  if (button) loadTrack(Number(button.dataset.index), true);
+  const favoriteButton = event.target.closest('.favorite-track');
+  if (favoriteButton) {
+    toggleFavorite(Number(favoriteButton.dataset.favoriteIndex));
+    return;
+  }
+  const playButton = event.target.closest('.playlist-item');
+  if (playButton) loadTrack(Number(playButton.dataset.index), true);
 });
+elements.favoriteCurrent.addEventListener('click', () => toggleFavorite(current));
 elements.play.addEventListener('click', togglePlayback);
-document.querySelector('#previous').addEventListener('click', () => loadTrack(current - 1, !audio.paused));
-document.querySelector('#next').addEventListener('click', () => loadTrack(current + 1, !audio.paused));
+document.querySelector('#previous').addEventListener('click', playPrevious);
+document.querySelector('#next').addEventListener('click', playNext);
 document.querySelector('#theme-toggle').addEventListener('click', () => setTheme(document.body.classList.contains('theme-neon') ? 'night' : 'neon'));
 elements.clear.addEventListener('click', clearPlaylist);
 elements.progress.addEventListener('input', () => {
   if (audio.duration) audio.currentTime = (Number(elements.progress.value) / 1000) * audio.duration;
+});
+elements.search.addEventListener('input', () => {
+  searchQuery = elements.search.value.trim().toLowerCase();
+  renderPlaylist();
+});
+elements.favoritesFilter.addEventListener('click', () => {
+  favoritesOnly = !favoritesOnly;
+  elements.favoritesFilter.setAttribute('aria-pressed', String(favoritesOnly));
+  renderPlaylist();
+});
+elements.shuffle.addEventListener('click', () => {
+  shuffleEnabled = !shuffleEnabled;
+  elements.shuffle.setAttribute('aria-pressed', String(shuffleEnabled));
+  setMessage(`Shuffle ${shuffleEnabled ? 'enabled' : 'disabled'}.`);
+});
+elements.repeat.addEventListener('click', () => {
+  repeatMode = repeatMode === 'all' ? 'one' : repeatMode === 'one' ? 'off' : 'all';
+  const labels = { all: 'REPEAT ALL', one: 'REPEAT ONE', off: 'REPEAT OFF' };
+  elements.repeat.dataset.mode = repeatMode;
+  elements.repeat.textContent = labels[repeatMode];
+  elements.repeat.classList.toggle('active', repeatMode !== 'off');
+  setMessage(`Repeat mode: ${repeatMode}.`);
+});
+elements.volume.addEventListener('input', () => {
+  audio.volume = Number(elements.volume.value) / 100;
+  elements.volumeValue.value = elements.volume.value;
+  elements.volumeValue.textContent = elements.volume.value;
 });
 
 setTheme('night');

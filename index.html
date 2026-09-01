@@ -47,7 +47,12 @@
 
             <div class="track-copy">
               <p class="eyebrow">NOW PLAYING</p>
-              <h1 id="song-title">Your road. Your soundtrack.</h1>
+              <div class="track-heading">
+                <h1 id="song-title">Your road. Your soundtrack.</h1>
+                <button id="favorite-current" class="favorite-current" type="button" aria-label="Add current song to favorites" aria-pressed="false" disabled>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.4 4.3 13A5.1 5.1 0 0 1 11.5 5.8l.5.5.5-.5a5.1 5.1 0 0 1 7.2 7.2z"/></svg>
+                </button>
+              </div>
               <p id="artist-name" class="artist">Add songs to begin the journey</p>
             </div>
           </div>
@@ -70,6 +75,16 @@
             </button>
           </div>
 
+          <div class="playback-options">
+            <button id="shuffle" class="option-button" type="button" aria-pressed="false">SHUFFLE</button>
+            <button id="repeat" class="option-button active" type="button" data-mode="all">REPEAT ALL</button>
+            <label class="volume-control" for="volume">
+              <span>VOLUME</span>
+              <input id="volume" type="range" min="0" max="100" value="85" aria-label="Volume" />
+              <output id="volume-value" for="volume">85</output>
+            </label>
+          </div>
+
           <div class="status-bar">
             <span id="player-message" role="status">Select multiple songs and they will play in order.</span>
             <span id="mood">NIGHT DRIVE</span>
@@ -85,7 +100,16 @@
             <span id="song-count" class="song-count">0 SONGS</span>
           </div>
 
+          <div class="queue-tools">
+            <label class="search-box" for="playlist-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 20-4.4-4.4M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/></svg>
+              <input id="playlist-search" type="search" placeholder="Search your queue" autocomplete="off" />
+            </label>
+            <button id="show-favorites" class="favorites-filter" type="button" aria-pressed="false">FAVS</button>
+          </div>
+
           <ol id="playlist-list" class="playlist" aria-label="Song playlist"></ol>
+          <p id="no-results" class="no-results" hidden>No songs match your search.</p>
           <div id="empty-playlist" class="empty-playlist">
             <span class="empty-number">00</span>
             <h3>No tracks in the queue</h3>

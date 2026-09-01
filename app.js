@@ -1,4 +1,7 @@
 const audio = new Audio();
+const LIBRARY_DB = 'nh48-radio-library';
+const LIBRARY_STORE = 'settings';
+const DIRECTORY_HANDLE_KEY = 'music-directory';
 
 // Add permanently hosted songs here after placing the files in /songs.
 // Example: { url: 'songs/night-drive.mp3', title: 'Night Drive', artist: 'Artist', mood: 'night' }
@@ -16,6 +19,8 @@ let frequencyData;
 let visualizerFrame;
 let smoothedEnergy = 0;
 let smoothedBass = 0;
+let savedDirectoryHandle = null;
+let installPrompt = null;
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -41,7 +46,14 @@ const elements = {
   repeat: document.querySelector('#repeat'),
   volume: document.querySelector('#volume'),
   volumeValue: document.querySelector('#volume-value'),
-  visualizer: document.querySelector('#audio-visualizer')
+  visualizer: document.querySelector('#audio-visualizer'),
+  folderInput: document.querySelector('#folder-files'),
+  scanFolder: document.querySelector('#scan-folder'),
+  scanFolderLabel: document.querySelector('#scan-folder-label'),
+  libraryStatus: document.querySelector('#library-status'),
+  libraryTitle: document.querySelector('#library-title'),
+  libraryCopy: document.querySelector('#library-copy'),
+  installApp: document.querySelector('#install-app')
 };
 
 const visualizerContext = elements.visualizer.getContext('2d');
@@ -185,6 +197,148 @@ function formatTime(seconds) {
 
 function cleanTitle(filename) {
   return filename.replace(/\.[^/.]+$/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function isAudioFile(file) {
+  return Boolean(file && (file.type?.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(file.name)));
+}
+
+function openLibraryDatabase() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(LIBRARY_DB, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(LIBRARY_STORE);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function readSavedDirectory() {
+  try {
+    const database = await openLibraryDatabase();
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(LIBRARY_STORE, 'readonly');
+      const request = transaction.objectStore(LIBRARY_STORE).get(DIRECTORY_HANDLE_KEY);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => database.close();
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function saveDirectory(handle) {
+  try {
+    const database = await openLibraryDatabase();
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction(LIBRARY_STORE, 'readwrite');
+      transaction.objectStore(LIBRARY_STORE).put(handle, DIRECTORY_HANDLE_KEY);
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error);
+    });
+    database.close();
+  } catch {
+    setMessage('Folder connected, but this browser could not remember it.');
+  }
+}
+
+async function getDirectoryPermission(handle, requestAccess = false) {
+  if (!handle?.queryPermission) return 'denied';
+  const options = { mode: 'read' };
+  try {
+    const currentPermission = await handle.queryPermission(options);
+    if (currentPermission === 'granted' || !requestAccess) return currentPermission;
+    return handle.requestPermission(options);
+  } catch {
+    return 'denied';
+  }
+}
+
+function updateLibraryStatus(title, copy, connected = false) {
+  elements.libraryTitle.textContent = title;
+  elements.libraryCopy.textContent = copy;
+  elements.libraryStatus.classList.toggle('connected', connected);
+}
+
+async function collectAudioFromDirectory(directoryHandle, prefix = directoryHandle.name) {
+  const found = [];
+  for await (const [name, entry] of directoryHandle.entries()) {
+    const path = `${prefix}/${name}`;
+    if (entry.kind === 'directory') {
+      found.push(...await collectAudioFromDirectory(entry, path));
+    } else if (/\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(name)) {
+      const file = await entry.getFile();
+      found.push({ file, path });
+    }
+  }
+  return found;
+}
+
+async function importDirectory(handle, announce = true) {
+  elements.scanFolder.disabled = true;
+  elements.scanFolderLabel.textContent = 'SCANNING...';
+  updateLibraryStatus('SCANNING LIBRARY', `Looking inside ${handle.name}...`, true);
+  if (announce) setMessage(`Scanning ${handle.name} for music...`);
+
+  try {
+    const entries = await collectAudioFromDirectory(handle);
+    entries.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+    const added = addFiles(entries, `${handle.name} folder`);
+    savedDirectoryHandle = handle;
+    await saveDirectory(handle);
+    updateLibraryStatus(handle.name.toUpperCase(), `${entries.length} audio ${entries.length === 1 ? 'file' : 'files'} found on this device.`, true);
+    elements.scanFolderLabel.textContent = 'CHOOSE FOLDER';
+    if (announce || added) {
+      setMessage(added
+        ? `${added} ${added === 1 ? 'song' : 'songs'} added from ${handle.name}.`
+        : entries.length ? `${handle.name} is already up to date.` : `No supported music was found in ${handle.name}.`);
+    }
+  } catch (error) {
+    console.error('Folder scan failed:', error);
+    updateLibraryStatus('SCAN INTERRUPTED', 'Choose the folder again to reconnect.', false);
+    elements.scanFolderLabel.textContent = 'SCAN FOLDER';
+    setMessage('The folder could not be scanned. Check its permission and try again.');
+  } finally {
+    elements.scanFolder.disabled = false;
+  }
+}
+
+async function scanMusicFolder() {
+  if (!('showDirectoryPicker' in window)) {
+    elements.folderInput.click();
+    return;
+  }
+
+  try {
+    let handle = null;
+    if (savedDirectoryHandle && await getDirectoryPermission(savedDirectoryHandle) !== 'granted') {
+      if (await getDirectoryPermission(savedDirectoryHandle, true) === 'granted') handle = savedDirectoryHandle;
+    }
+    if (!handle) handle = await window.showDirectoryPicker({ id: 'nh48-music-library', mode: 'read' });
+    await importDirectory(handle);
+  } catch (error) {
+    if (error?.name !== 'AbortError') {
+      console.error('Folder selection failed:', error);
+      setMessage('Folder access was not granted. You can still add individual songs.');
+    }
+  }
+}
+
+async function restoreMusicFolder() {
+  if (!('showDirectoryPicker' in window)) {
+    updateLibraryStatus('LOCAL LIBRARY', 'Tap Scan Folder and choose your Music or Downloads folder.');
+    return;
+  }
+
+  savedDirectoryHandle = await readSavedDirectory();
+  if (!savedDirectoryHandle) return;
+  const permission = await getDirectoryPermission(savedDirectoryHandle);
+  if (permission === 'granted') {
+    await importDirectory(savedDirectoryHandle, false);
+  } else {
+    updateLibraryStatus('FOLDER REMEMBERED', `${savedDirectoryHandle.name} needs permission to reconnect.`);
+    elements.scanFolderLabel.textContent = 'RECONNECT';
+  }
 }
 
 function setMessage(text) {
@@ -347,36 +501,37 @@ function togglePlayback() {
   else audio.pause();
 }
 
-function addFiles(files) {
-  const selected = [...files].filter(file =>
-    file.type.startsWith('audio/') || /\.(mp3|wav|ogg|m4a|aac|flac)$/i.test(file.name)
-  );
+function addFiles(files, source = 'Local collection') {
+  const selected = [...files]
+    .map(item => item?.file ? item : ({ file: item, path: item.webkitRelativePath || item.name }))
+    .filter(({ file }) => isAudioFile(file));
   if (!selected.length) {
     setMessage('No supported audio files were selected.');
-    return;
+    return 0;
   }
 
   const existingKeys = new Set(tracks.map(trackKey));
   const additions = selected
-    .filter(file => !existingKeys.has(`${file.name}-${file.size}-${file.lastModified}`))
-    .map((file, index) => ({
+    .filter(({ file, path }) => !existingKeys.has(`${path}-${file.size}-${file.lastModified}`))
+    .map(({ file, path }, index) => ({
       url: URL.createObjectURL(file),
       title: cleanTitle(file.name) || `Track ${tracks.length + index + 1}`,
-      artist: 'Local collection',
+      artist: path.includes('/') ? path.split('/').slice(-2, -1)[0] : source,
       mood: (tracks.length + index) % 2 ? 'neon' : 'night',
       local: true,
-      key: `${file.name}-${file.size}-${file.lastModified}`
+      key: `${path}-${file.size}-${file.lastModified}`
     }));
 
   if (!additions.length) {
     setMessage('Those songs are already in your queue.');
-    return;
+    return 0;
   }
 
   tracks.push(...additions);
   renderPlaylist();
   setMessage(`${additions.length} ${additions.length === 1 ? 'song' : 'songs'} added to the queue.`);
   if (current === -1) loadTrack(0, false);
+  return additions.length;
 }
 
 function toggleFavorite(index) {
@@ -443,9 +598,20 @@ audio.addEventListener('error', () => {
 });
 
 document.querySelector('#add-songs').addEventListener('click', () => elements.fileInput.click());
+elements.scanFolder.addEventListener('click', scanMusicFolder);
 elements.fileInput.addEventListener('change', () => {
   addFiles(elements.fileInput.files);
   elements.fileInput.value = '';
+});
+elements.folderInput.addEventListener('change', () => {
+  const files = [...elements.folderInput.files];
+  const folderName = files[0]?.webkitRelativePath?.split('/')[0] || 'Selected folder';
+  const added = addFiles(files, `${folderName} folder`);
+  const audioCount = files.filter(isAudioFile).length;
+  updateLibraryStatus(folderName.toUpperCase(), `${audioCount} audio ${audioCount === 1 ? 'file' : 'files'} selected from this device.`, true);
+  elements.scanFolderLabel.textContent = 'SCAN AGAIN';
+  if (added) setMessage(`${added} ${added === 1 ? 'song' : 'songs'} added from ${folderName}.`);
+  elements.folderInput.value = '';
 });
 elements.playlist.addEventListener('click', event => {
   const favoriteButton = event.target.closest('.favorite-track');
@@ -493,9 +659,36 @@ elements.volume.addEventListener('input', () => {
   elements.volumeValue.textContent = elements.volume.value;
 });
 
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  installPrompt = event;
+  elements.installApp.hidden = false;
+});
+
+elements.installApp.addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice;
+  installPrompt = null;
+  elements.installApp.hidden = true;
+});
+
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  elements.installApp.hidden = true;
+  setMessage('NH 48 Radio is installed and ready for the road.');
+});
+
 window.addEventListener('resize', drawIdleVisualizer);
 
 setTheme('night');
 renderPlaylist();
 drawIdleVisualizer();
 if (tracks.length) loadTrack(0, false);
+restoreMusicFolder();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(error => console.error('Offline setup failed:', error));
+  });
+}

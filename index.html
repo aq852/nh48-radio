@@ -5,7 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#090a0f" />
     <meta name="description" content="NH 48 Radio - your private night-drive playlist." />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>NH 48 Radio</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon.svg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body class="theme-night">
@@ -24,10 +29,13 @@
           <span class="brand-mark">48</span>
           <span><strong>NH RADIO</strong><small>MIDNIGHT FREQUENCY</small></span>
         </a>
-        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to neon theme">
-          <span class="theme-dot"></span>
-          <span id="theme-label">NIGHT MODE</span>
-        </button>
+        <div class="topbar-actions">
+          <button id="install-app" class="install-app" type="button" hidden>INSTALL APP</button>
+          <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to neon theme">
+            <span class="theme-dot"></span>
+            <span id="theme-label">NIGHT MODE</span>
+          </button>
+        </div>
       </header>
 
       <section class="radio-console">
@@ -117,22 +125,32 @@
           <div id="empty-playlist" class="empty-playlist">
             <span class="empty-number">00</span>
             <h3>No tracks in the queue</h3>
-            <p>Choose several MP3, WAV, or OGG files. They will be added here automatically.</p>
+            <p>Scan a music folder or choose individual songs. They will be added here automatically.</p>
+          </div>
+
+          <div id="library-status" class="library-status">
+            <span class="library-status-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3.5 7.5h6l2-2h9v13h-17zM8 14.5a4 4 0 1 0 8 0v-4M16 10.5l-2-2-2 2"/></svg>
+            </span>
+            <span><strong id="library-title">LOCAL LIBRARY</strong><small id="library-copy">Choose a folder to find music on this device.</small></span>
           </div>
 
           <div class="queue-actions">
-            <button id="add-songs" class="add-songs" type="button">
-              <span>+</span> ADD SONGS
+            <button id="scan-folder" class="scan-folder" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 7.5h6l2-2h9v13h-17zM8 14.5a4 4 0 1 0 8 0v-4M16 10.5l-2-2-2 2"/></svg>
+              <span id="scan-folder-label">SCAN FOLDER</span>
             </button>
+            <button id="add-songs" class="add-songs" type="button"><span>+</span> SONGS</button>
             <button id="clear-playlist" class="clear-playlist" type="button" disabled>CLEAR</button>
             <input id="song-files" type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/*" multiple hidden />
+            <input id="folder-files" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" webkitdirectory directory multiple hidden />
           </div>
-          <p class="privacy-note">Files play locally in your browser and are never uploaded.</p>
+          <p class="privacy-note">Private by design: your music stays on this device and is never uploaded.</p>
         </aside>
       </section>
 
       <footer><span>NH 48 / AFTER DARK</span><span>DRIVE SAFE</span></footer>
     </main>
-    <script src="app.js"></script>
+    <script src="app.js" defer></script>
   </body>
 </html>

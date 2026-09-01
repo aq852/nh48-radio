@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#130710" />
+    <meta name="description" content="NH 48 Radio — a cinematic retro radio experience." />
+    <title>NH 48 Radio</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="theme-90s">
+    <main class="scene" aria-label="NH 48 Radio player">
+      <div class="stars" aria-hidden="true"></div>
+      <div class="rain" aria-hidden="true"></div>
+      <div class="sun" aria-hidden="true"></div>
+      <div class="grid" aria-hidden="true"></div>
+      <div class="horizon" aria-hidden="true"></div>
+      <div class="road" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="bus" aria-hidden="true"><span class="bus-sign">NH 48</span><span class="wheel left"></span><span class="wheel right"></span></div>
+
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="NH 48 Radio home"><span>NH</span> 48 <em>RADIO</em></a>
+        <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to 80s theme">
+          <span class="toggle-icon">☾</span><span class="toggle-label">90s night</span>
+        </button>
+      </header>
+
+      <section class="player glass">
+        <div class="live"><span></span> LIVE FROM THE HIGHWAY</div>
+        <p class="eyebrow">NOW PLAYING</p>
+        <h1 id="song-title">Midnight on NH 48</h1>
+        <p id="artist-name" class="artist">The Night Drives</p>
+        <div class="visualizer" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div>
+        <div class="progress-wrap">
+          <span id="elapsed">0:00</span>
+          <input id="progress" type="range" min="0" max="100" value="0" aria-label="Track progress" />
+          <span id="duration">3:42</span>
+        </div>
+        <div class="controls">
+          <button id="previous" type="button" aria-label="Previous track">↶</button>
+          <button id="play" class="play" type="button" aria-label="Play track">▶</button>
+          <button id="next" type="button" aria-label="Next track">↷</button>
+        </div>
+        <div class="station-meta"><span>STEREO</span><span>•</span><span>108.0 FM</span><span>•</span><span id="mood">NOSTALGIA</span></div>
+      </section>
+
+      <p class="hint">Tap the moon to switch eras</p>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>

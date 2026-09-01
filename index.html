@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#130710" />
-    <meta name="description" content="NH 48 Radio — a cinematic retro radio experience." />
+    <meta name="description" content="NH 48 Radio - a cinematic retro radio experience." />
     <title>NH 48 Radio</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -21,15 +21,15 @@
       <header class="topbar">
         <a class="brand" href="/" aria-label="NH 48 Radio home"><span>NH</span> 48 <em>RADIO</em></a>
         <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Switch to 80s theme">
-          <span class="toggle-icon">☾</span><span class="toggle-label">90s night</span>
+          <span class="toggle-icon">90S</span><span class="toggle-label">night mode</span>
         </button>
       </header>
 
       <section class="player glass">
         <div class="live"><span></span> LIVE FROM THE HIGHWAY</div>
         <p class="eyebrow">NOW PLAYING</p>
-        <h1 id="song-title">Midnight on NH 48</h1>
-        <p id="artist-name" class="artist">The Night Drives</p>
+        <h1 id="song-title">Add your first song</h1>
+        <p id="artist-name" class="artist">Choose an MP3 from your device</p>
         <div class="visualizer" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></div>
         <div class="progress-wrap">
           <span id="elapsed">0:00</span>
@@ -37,14 +37,17 @@
           <span id="duration">3:42</span>
         </div>
         <div class="controls">
-          <button id="previous" type="button" aria-label="Previous track">↶</button>
-          <button id="play" class="play" type="button" aria-label="Play track">▶</button>
-          <button id="next" type="button" aria-label="Next track">↷</button>
+          <button id="previous" type="button" aria-label="Previous track">PREV</button>
+          <button id="play" class="play" type="button" aria-label="Play track">PLAY</button>
+          <button id="next" type="button" aria-label="Next track">NEXT</button>
         </div>
-        <div class="station-meta"><span>STEREO</span><span>•</span><span>108.0 FM</span><span>•</span><span id="mood">NOSTALGIA</span></div>
+        <button id="add-songs" class="add-songs" type="button">ADD MP3 SONGS</button>
+        <input id="song-files" type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg" multiple hidden />
+        <p id="player-message" class="player-message" role="status">Your songs stay on this device until you add them to the site folder.</p>
+        <div class="station-meta"><span>STEREO</span><span>|</span><span>108.0 FM</span><span>|</span><span id="mood">NOSTALGIA</span></div>
       </section>
 
-      <p class="hint">Tap the moon to switch eras</p>
+      <p class="hint">Tap 90S to switch eras</p>
     </main>
     <script src="app.js"></script>
   </body>

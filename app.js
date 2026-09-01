@@ -9,6 +9,13 @@ let shuffleEnabled = false;
 let repeatMode = 'all';
 let searchQuery = '';
 let favoritesOnly = false;
+let audioContext;
+let analyser;
+let mediaSource;
+let frequencyData;
+let visualizerFrame;
+let smoothedEnergy = 0;
+let smoothedBass = 0;
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -33,8 +40,116 @@ const elements = {
   shuffle: document.querySelector('#shuffle'),
   repeat: document.querySelector('#repeat'),
   volume: document.querySelector('#volume'),
-  volumeValue: document.querySelector('#volume-value')
+  volumeValue: document.querySelector('#volume-value'),
+  visualizer: document.querySelector('#audio-visualizer')
 };
+
+const visualizerContext = elements.visualizer.getContext('2d');
+
+function resizeVisualizer() {
+  const bounds = elements.visualizer.getBoundingClientRect();
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = Math.max(1, Math.round(bounds.width * ratio));
+  const height = Math.max(1, Math.round(bounds.height * ratio));
+  if (elements.visualizer.width !== width || elements.visualizer.height !== height) {
+    elements.visualizer.width = width;
+    elements.visualizer.height = height;
+  }
+}
+
+function drawIdleVisualizer() {
+  resizeVisualizer();
+  const { width, height } = elements.visualizer;
+  visualizerContext.clearRect(0, 0, width, height);
+  visualizerContext.fillStyle = 'rgba(255,255,255,.12)';
+  visualizerContext.fillRect(0, Math.round(height * .78), width, 1);
+}
+
+function ensureAudioGraph() {
+  if (analyser) return true;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    setMessage('Audio visualization is not supported by this browser.');
+    return false;
+  }
+
+  try {
+    audioContext = new AudioContextClass();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = .82;
+    mediaSource = audioContext.createMediaElementSource(audio);
+    mediaSource.connect(analyser);
+    analyser.connect(audioContext.destination);
+    frequencyData = new Uint8Array(analyser.frequencyBinCount);
+    document.documentElement.classList.add('web-audio-ready');
+    drawIdleVisualizer();
+    return true;
+  } catch {
+    setMessage('The spectrum could not start, but music playback is still available.');
+    return false;
+  }
+}
+
+function renderVisualizer() {
+  if (!analyser || audio.paused) return;
+  resizeVisualizer();
+  analyser.getByteFrequencyData(frequencyData);
+
+  let bassTotal = 0;
+  let energyTotal = 0;
+  for (let index = 0; index < frequencyData.length; index += 1) {
+    energyTotal += frequencyData[index];
+    if (index < 10) bassTotal += frequencyData[index];
+  }
+  const bass = bassTotal / (10 * 255);
+  const energy = energyTotal / (frequencyData.length * 255);
+  smoothedBass += (bass - smoothedBass) * .18;
+  smoothedEnergy += (energy - smoothedEnergy) * .16;
+  document.documentElement.style.setProperty('--bass', smoothedBass.toFixed(3));
+  document.documentElement.style.setProperty('--energy', smoothedEnergy.toFixed(3));
+
+  const { width, height } = elements.visualizer;
+  visualizerContext.clearRect(0, 0, width, height);
+  const barCount = 36;
+  const gap = Math.max(2, width * .006);
+  const barWidth = (width - gap * (barCount - 1)) / barCount;
+  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#ff6738';
+  const gradient = visualizerContext.createLinearGradient(0, height, 0, 0);
+  gradient.addColorStop(0, accent);
+  gradient.addColorStop(1, 'rgba(255,255,255,.88)');
+  visualizerContext.fillStyle = gradient;
+
+  for (let index = 0; index < barCount; index += 1) {
+    const dataIndex = Math.floor((index / barCount) * frequencyData.length);
+    const level = frequencyData[dataIndex] / 255;
+    const barHeight = Math.max(2, level * height * .92);
+    const x = index * (barWidth + gap);
+    visualizerContext.fillRect(x, height - barHeight, barWidth, barHeight);
+  }
+
+  visualizerFrame = requestAnimationFrame(renderVisualizer);
+}
+
+function startVisualizer() {
+  cancelAnimationFrame(visualizerFrame);
+  renderVisualizer();
+}
+
+function stopVisualizer() {
+  cancelAnimationFrame(visualizerFrame);
+  smoothedEnergy = 0;
+  smoothedBass = 0;
+  document.documentElement.style.setProperty('--bass', '0');
+  document.documentElement.style.setProperty('--energy', '0');
+  drawIdleVisualizer();
+}
+
+async function startPlayback() {
+  ensureAudioGraph();
+  if (audioContext?.state === 'suspended') await audioContext.resume();
+  return audio.play();
+}
 
 function readFavorites() {
   try {
@@ -182,7 +297,7 @@ function loadTrack(index, shouldPlay = false) {
   setMessage(`Track ${current + 1} of ${tracks.length}`);
   renderPlaylist();
 
-  if (shouldPlay) audio.play().catch(() => setMessage('Press play to continue.'));
+  if (shouldPlay) startPlayback().catch(() => setMessage('Press play to continue.'));
 }
 
 function getNextIndex() {
@@ -228,7 +343,7 @@ function togglePlayback() {
     elements.fileInput.click();
     return;
   }
-  if (audio.paused) audio.play().catch(() => setMessage('Playback was blocked. Press play again.'));
+  if (audio.paused) startPlayback().catch(() => setMessage('Playback was blocked. Press play again.'));
   else audio.pause();
 }
 
@@ -309,6 +424,7 @@ audio.addEventListener('play', () => {
   elements.play.dataset.playing = 'true';
   elements.play.setAttribute('aria-label', 'Pause track');
   document.body.classList.add('is-playing');
+  startVisualizer();
   renderPlaylist();
 });
 
@@ -316,6 +432,7 @@ audio.addEventListener('pause', () => {
   elements.play.dataset.playing = 'false';
   elements.play.setAttribute('aria-label', 'Play track');
   document.body.classList.remove('is-playing');
+  stopVisualizer();
   renderPlaylist();
 });
 
@@ -376,6 +493,9 @@ elements.volume.addEventListener('input', () => {
   elements.volumeValue.textContent = elements.volume.value;
 });
 
+window.addEventListener('resize', drawIdleVisualizer);
+
 setTheme('night');
 renderPlaylist();
+drawIdleVisualizer();
 if (tracks.length) loadTrack(0, false);

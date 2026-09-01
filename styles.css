@@ -10,6 +10,8 @@
   --accent: #ff6738;
   --accent-soft: rgba(255, 103, 56, .16);
   --gold: #f3b35c;
+  --energy: 0;
+  --bass: 0;
 }
 
 * { box-sizing: border-box; }
@@ -36,6 +38,8 @@ button { color: inherit; }
 .glow { position: absolute; width: 44vw; aspect-ratio: 1; border-radius: 50%; filter: blur(110px); opacity: .12; }
 .glow-one { left: -24vw; bottom: -25vw; background: var(--accent); }
 .glow-two { right: -28vw; top: -28vw; background: #7557ff; }
+.audio-aura { position: absolute; left: 16%; top: 28%; width: 36vw; aspect-ratio: 1; border-radius: 50%; background: var(--accent); filter: blur(125px); opacity: calc(.035 + var(--energy) * .18); transform: scale(calc(1 + var(--bass) * .2)); transition: background .7s ease; }
+.cinematic-flare { position: absolute; left: -30%; top: 46%; width: 38%; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); box-shadow: 0 0 28px var(--accent); opacity: calc(.08 + var(--energy) * .32); transform: rotate(-12deg); animation: flare-drift 11s ease-in-out infinite; }
 .road-line { position: absolute; bottom: -20%; left: 50%; width: 1px; height: 58%; background: linear-gradient(transparent, var(--accent)); transform-origin: bottom; opacity: .36; }
 .line-one { transform: rotate(36deg); }
 .line-two { transform: rotate(-36deg); }
@@ -57,7 +61,7 @@ button { color: inherit; }
 .frequency { margin-left: auto; color: var(--muted); }
 
 .now-playing { display: grid; grid-template-columns: minmax(190px, 270px) minmax(0, 1fr); align-items: center; gap: clamp(26px, 4vw, 52px); margin: auto 0; padding: 40px 0 34px; }
-.cover { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: 18px; background: linear-gradient(145deg, #232027, #0c0d12 66%); box-shadow: 0 28px 50px rgba(0, 0, 0, .42), inset 0 0 0 1px rgba(255, 255, 255, .08); }
+.cover { position: relative; aspect-ratio: 1; overflow: hidden; border-radius: 18px; background: linear-gradient(145deg, #232027, #0c0d12 66%); box-shadow: 0 28px 50px rgba(0, 0, 0, .42), 0 0 calc(var(--energy) * 45px) var(--accent-soft), inset 0 0 0 1px rgba(255, 255, 255, .08); filter: saturate(calc(1 + var(--energy) * .65)); transform: scale(calc(1 + var(--bass) * .014)); transition: filter .12s linear, transform .12s linear; }
 .cover::before { content: ""; position: absolute; width: 85%; aspect-ratio: 1; border-radius: 50%; top: -44%; right: -38%; border: 1px solid rgba(255, 255, 255, .12); box-shadow: 0 0 0 25px rgba(255, 255, 255, .025), 0 0 0 50px rgba(255, 255, 255, .018); }
 .cover-grid { position: absolute; inset: 0; opacity: .25; background-image: linear-gradient(var(--accent) 1px, transparent 1px), linear-gradient(90deg, var(--accent) 1px, transparent 1px); background-size: 38px 38px; transform: perspective(260px) rotateX(58deg) scale(1.8); transform-origin: bottom; }
 .vinyl { position: absolute; width: 48%; aspect-ratio: 1; left: 12%; top: 15%; display: grid; place-items: center; border-radius: 50%; background: repeating-radial-gradient(circle, #17171b 0 4px, #252329 5px 6px); box-shadow: 14px 20px 35px rgba(0, 0, 0, .48); animation: spin 8s linear infinite paused; }
@@ -70,6 +74,10 @@ button { color: inherit; }
 .equalizer i:nth-child(2n) { --bar: 78%; animation-delay: -.3s; }
 .equalizer i:nth-child(3n) { --bar: 100%; animation-delay: -.55s; }
 .equalizer i:nth-child(4n) { --bar: 62%; animation-delay: -.15s; }
+.web-audio-ready .equalizer { display: none; }
+#audio-visualizer { position: absolute; z-index: 3; left: 7%; right: 7%; bottom: 8%; width: 86%; height: 34%; opacity: .92; }
+.spectrum-badge { position: absolute; z-index: 4; right: 8%; bottom: 7%; color: rgba(255,255,255,.42); font-size: .42rem; font-weight: 800; letter-spacing: .15em; transform: translateY(11px); opacity: 0; transition: opacity .3s ease; }
+.web-audio-ready .spectrum-badge { opacity: 1; }
 .eyebrow { margin: 0 0 10px; color: var(--accent); font-size: .59rem; font-weight: 800; letter-spacing: .22em; }
 .track-copy { min-width: 0; }
 .track-heading { display: flex; align-items: start; gap: 14px; }
@@ -159,6 +167,7 @@ footer { width: min(1180px, 100%); margin: 20px auto 0; display: flex; justify-c
 @keyframes pulse { 50% { opacity: .25; transform: scale(.78); } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes bars { to { height: 22%; } }
+@keyframes flare-drift { 0%, 100% { transform: translateX(-10%) rotate(-12deg); } 50% { transform: translateX(370%) rotate(-12deg); } }
 
 @media (max-width: 900px) {
   body { overflow: auto; }

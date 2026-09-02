@@ -22,6 +22,9 @@ let smoothedBass = 0;
 let savedDirectoryHandle = null;
 let installPrompt = null;
 let lastMediaPositionUpdate = 0;
+let openQueueMenuIndex = null;
+let draggedTrackIndex = null;
+let priorityNextKey = null;
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -443,6 +446,84 @@ function createHeartIcon() {
   return svg;
 }
 
+function createQueueIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  [5, 12, 19].forEach(y => {
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', '12');
+    circle.setAttribute('cy', String(y));
+    circle.setAttribute('r', '1.5');
+    svg.append(circle);
+  });
+  return svg;
+}
+
+function moveTrack(fromIndex, toIndex, message) {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= tracks.length || toIndex >= tracks.length) return;
+  const activeTrack = tracks[current];
+  const [track] = tracks.splice(fromIndex, 1);
+  tracks.splice(toIndex, 0, track);
+  current = tracks.indexOf(activeTrack);
+  openQueueMenuIndex = null;
+  renderPlaylist();
+  setMessage(message || `${track.title} moved in the queue.`);
+}
+
+function moveTrackBy(index, direction) {
+  const destination = index + direction;
+  if (destination < 0 || destination >= tracks.length) return;
+  const track = tracks[index];
+  moveTrack(index, destination, `${track.title} moved ${direction < 0 ? 'up' : 'down'} in the queue.`);
+}
+
+function queueTrackNext(index) {
+  const track = tracks[index];
+  if (!track) return;
+  if (index === current) {
+    setMessage(`${track.title} is already playing.`);
+    return;
+  }
+  priorityNextKey = trackKey(track);
+  openQueueMenuIndex = null;
+  renderPlaylist();
+  setMessage(`${track.title} will play next.`);
+}
+
+function removeTrack(index) {
+  const track = tracks[index];
+  if (!track) return;
+  const wasCurrent = index === current;
+  const wasPlaying = !audio.paused;
+  const activeTrack = tracks[current];
+  if (priorityNextKey === trackKey(track)) priorityNextKey = null;
+
+  tracks.splice(index, 1);
+  if (track.local) URL.revokeObjectURL(track.url);
+  openQueueMenuIndex = null;
+
+  if (!tracks.length) {
+    clearPlaylist();
+    return;
+  }
+
+  if (wasCurrent) {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+    const replacement = Math.min(index, tracks.length - 1);
+    current = -1;
+    loadTrack(replacement, wasPlaying);
+    setMessage(`${track.title} removed. ${tracks[current].title} is now playing.`);
+    return;
+  }
+
+  current = tracks.indexOf(activeTrack);
+  renderPlaylist();
+  setMessage(`${track.title} removed from the queue.`);
+}
+
 function renderPlaylist() {
   elements.playlist.replaceChildren();
   const visibleTracks = tracks
@@ -461,9 +542,19 @@ function renderPlaylist() {
     const trackArtist = document.createElement('span');
     const bars = document.createElement('span');
     const favoriteButton = document.createElement('button');
+    const moreButton = document.createElement('button');
+    const menu = document.createElement('div');
+    const dragHandle = document.createElement('span');
     const favorite = isFavorite(track);
 
     item.className = 'playlist-row';
+    item.dataset.index = String(index);
+    item.draggable = true;
+    item.classList.toggle('queued-next', trackKey(track) === priorityNextKey && index !== current);
+    item.setAttribute('aria-label', `Drag ${track.title} to reorder`);
+    dragHandle.className = 'drag-handle';
+    dragHandle.setAttribute('aria-hidden', 'true');
+    dragHandle.textContent = '⋮⋮';
     playButton.type = 'button';
     playButton.className = `playlist-item${index === current ? ' active' : ''}`;
     playButton.dataset.index = String(index);
@@ -488,7 +579,34 @@ function renderPlaylist() {
     favoriteButton.setAttribute('aria-label', `${favorite ? 'Remove' : 'Add'} ${track.title} ${favorite ? 'from' : 'to'} favorites`);
     favoriteButton.append(createHeartIcon());
 
-    item.append(playButton, favoriteButton);
+    moreButton.type = 'button';
+    moreButton.className = 'queue-more';
+    moreButton.dataset.queueAction = 'menu';
+    moreButton.dataset.index = String(index);
+    moreButton.setAttribute('aria-label', `Queue options for ${track.title}`);
+    moreButton.setAttribute('aria-expanded', String(openQueueMenuIndex === index));
+    moreButton.append(createQueueIcon());
+
+    menu.className = 'queue-menu';
+    menu.hidden = openQueueMenuIndex !== index;
+    menu.setAttribute('role', 'menu');
+    [
+      ['next', 'PLAY NEXT'],
+      ['up', 'MOVE UP'],
+      ['down', 'MOVE DOWN'],
+      ['remove', 'REMOVE']
+    ].forEach(([action, label]) => {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.textContent = label;
+      option.dataset.queueAction = action;
+      option.dataset.index = String(index);
+      option.setAttribute('role', 'menuitem');
+      if ((action === 'up' && index === 0) || (action === 'down' && index === tracks.length - 1) || (action === 'next' && index === current)) option.disabled = true;
+      menu.append(option);
+    });
+
+    item.append(dragHandle, playButton, favoriteButton, moreButton, menu);
     elements.playlist.append(item);
   });
 
@@ -509,6 +627,7 @@ function loadTrack(index, shouldPlay = false) {
 
   current = (index + tracks.length) % tracks.length;
   const track = tracks[current];
+  if (priorityNextKey === trackKey(track)) priorityNextKey = null;
   audio.src = track.url;
   elements.title.textContent = track.title;
   elements.artist.textContent = track.artist;
@@ -526,6 +645,11 @@ function loadTrack(index, shouldPlay = false) {
 
 function getNextIndex() {
   if (!tracks.length) return -1;
+  if (priorityNextKey) {
+    const priorityIndex = tracks.findIndex(track => trackKey(track) === priorityNextKey);
+    priorityNextKey = null;
+    if (priorityIndex >= 0 && priorityIndex !== current) return priorityIndex;
+  }
   if (repeatMode === 'one') return current;
   if (current >= tracks.length - 1 && repeatMode === 'off') return -1;
   if (shuffleEnabled && tracks.length > 1) {
@@ -621,6 +745,8 @@ function clearPlaylist() {
   tracks.forEach(track => { if (track.local) URL.revokeObjectURL(track.url); });
   tracks = [...bundledTracks];
   current = -1;
+  priorityNextKey = null;
+  openQueueMenuIndex = null;
   elements.title.textContent = 'Your road. Your soundtrack.';
   elements.artist.textContent = 'Add songs to begin the journey';
   elements.coverInitial.textContent = '48';
@@ -689,6 +815,19 @@ elements.folderInput.addEventListener('change', () => {
   elements.folderInput.value = '';
 });
 elements.playlist.addEventListener('click', event => {
+  const queueAction = event.target.closest('[data-queue-action]');
+  if (queueAction) {
+    const index = Number(queueAction.dataset.index);
+    const action = queueAction.dataset.queueAction;
+    if (action === 'menu') {
+      openQueueMenuIndex = openQueueMenuIndex === index ? null : index;
+      renderPlaylist();
+    } else if (action === 'next') queueTrackNext(index);
+    else if (action === 'up') moveTrackBy(index, -1);
+    else if (action === 'down') moveTrackBy(index, 1);
+    else if (action === 'remove') removeTrack(index);
+    return;
+  }
   const favoriteButton = event.target.closest('.favorite-track');
   if (favoriteButton) {
     toggleFavorite(Number(favoriteButton.dataset.favoriteIndex));
@@ -696,6 +835,45 @@ elements.playlist.addEventListener('click', event => {
   }
   const playButton = event.target.closest('.playlist-item');
   if (playButton) loadTrack(Number(playButton.dataset.index), true);
+});
+elements.playlist.addEventListener('dragstart', event => {
+  const row = event.target.closest('.playlist-row');
+  if (!row) return;
+  draggedTrackIndex = Number(row.dataset.index);
+  if (event.dataTransfer) {
+    event.dataTransfer.setData('text/plain', String(draggedTrackIndex));
+    event.dataTransfer.effectAllowed = 'move';
+  }
+  row.classList.add('dragging');
+});
+elements.playlist.addEventListener('dragover', event => {
+  const row = event.target.closest('.playlist-row');
+  if (!row || draggedTrackIndex === null) return;
+  event.preventDefault();
+  if (Number(row.dataset.index) !== draggedTrackIndex) row.classList.add('drag-over');
+});
+elements.playlist.addEventListener('dragleave', event => {
+  event.target.closest('.playlist-row')?.classList.remove('drag-over');
+});
+elements.playlist.addEventListener('drop', event => {
+  const row = event.target.closest('.playlist-row');
+  if (!row || draggedTrackIndex === null) return;
+  event.preventDefault();
+  const targetIndex = Number(row.dataset.index);
+  const sourceIndex = draggedTrackIndex;
+  draggedTrackIndex = null;
+  elements.playlist.querySelectorAll('.playlist-row').forEach(item => item.classList.remove('dragging', 'drag-over'));
+  moveTrack(sourceIndex, targetIndex);
+});
+elements.playlist.addEventListener('dragend', () => {
+  draggedTrackIndex = null;
+  elements.playlist.querySelectorAll('.playlist-row').forEach(item => item.classList.remove('dragging', 'drag-over'));
+});
+document.addEventListener('click', event => {
+  if (openQueueMenuIndex !== null && !event.target.closest('.playlist-row')) {
+    openQueueMenuIndex = null;
+    renderPlaylist();
+  }
 });
 elements.favoriteCurrent.addEventListener('click', () => toggleFavorite(current));
 elements.play.addEventListener('click', togglePlayback);
@@ -765,6 +943,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=3').catch(error => console.error('Offline setup failed:', error));
   });
 }

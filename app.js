@@ -255,7 +255,7 @@ function saveStoredObject(key, value) {
 }
 
 function formatFrequency(frequency) {
-  return frequency >= 1000 ? `${frequency / 1000}k` : String(frequency);
+  return frequency >= 1000 ? String(frequency / 1000) + 'k' : String(frequency);
 }
 
 function applyEqSettings(render = true) {
@@ -272,12 +272,12 @@ function renderStudioControls() {
   Object.keys(EQ_PRESETS).forEach(name => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `eq-preset${eqSettings.preset === name ? ' active' : ''}`;
+    button.className = 'eq-preset' + (eqSettings.preset === name ? ' active' : '');
     button.textContent = name.toUpperCase();
     button.addEventListener('click', () => {
       eqSettings = { ...eqSettings, bands: [...EQ_PRESETS[name]], preset: name };
       applyEqSettings();
-      setMessage(`${name} EQ preset applied.`);
+      setMessage(name + ' EQ preset applied.');
     });
     elements.eqPresets.append(button);
   });
@@ -288,25 +288,25 @@ function renderStudioControls() {
     const value = document.createElement('output');
     const input = document.createElement('input');
     label.className = 'eq-band';
-    label.innerHTML = `<span>${formatFrequency(frequency)}</span>`;
+    label.innerHTML = '<span>' + formatFrequency(frequency) + '</span>';
     input.type = 'range';
     input.min = '-12';
     input.max = '12';
     input.step = '1';
     input.value = String(eqSettings.bands[index]);
-    input.setAttribute('aria-label', `${formatFrequency(frequency)} equalizer band`);
-    value.textContent = `${eqSettings.bands[index] > 0 ? '+' : ''}${eqSettings.bands[index]}`;
+    input.setAttribute('aria-label', formatFrequency(frequency) + ' equalizer band');
+    value.textContent = (eqSettings.bands[index] > 0 ? '+' : '') + eqSettings.bands[index];
     input.addEventListener('input', () => {
       eqSettings.bands[index] = Number(input.value);
       eqSettings.preset = 'Custom';
-      value.textContent = `${input.value > 0 ? '+' : ''}${input.value}`;
+      value.textContent = (input.value > 0 ? '+' : '') + input.value;
       applyEqSettings(false);
     });
     label.append(input, value);
     elements.eqBands.append(label);
   });
   elements.preamp.value = String(eqSettings.preamp || 0);
-  elements.preampValue.textContent = `${eqSettings.preamp > 0 ? '+' : ''}${eqSettings.preamp} dB`;
+  elements.preampValue.textContent = (eqSettings.preamp > 0 ? '+' : '') + eqSettings.preamp + ' dB';
   elements.transition.value = String(transitionLength);
   elements.sleepTimer.value = sleepEndsAt > Date.now() ? String(Math.ceil((sleepEndsAt - Date.now()) / 60000)) : '0';
 }
@@ -325,7 +325,7 @@ function setSleepTimer(minutes) {
     elements.sleepTimer.value = '0';
     setMessage('Sleep timer finished. Good night.');
   }, duration * 60000);
-  setMessage(`Sleep timer set for ${duration} minutes.`);
+  setMessage('Sleep timer set for ' + duration + ' minutes.');
 }
 
 function fadeInCurrentTrack(duration) {
@@ -404,7 +404,7 @@ function addStream(name, url) {
     setMessage('Use a full https:// stream URL.');
     return false;
   }
-  const key = `stream-${normalizedUrl}`;
+  const key = 'stream-' + normalizedUrl;
   if (tracks.some(track => trackKey(track) === key)) {
     setMessage('That station is already in your queue.');
     return false;
@@ -417,14 +417,16 @@ function addStream(name, url) {
   }
   renderPlaylist();
   if (current === -1) loadTrack(0, false);
-  setMessage(`${stream.title} added as a live station.`);
+  setMessage(stream.title + ' added as a live station.');
   return true;
 }
 
 function restoreSavedStreams() {
   savedStreams.forEach(stream => {
-    if (!stream?.url || tracks.some(track => trackKey(track) === `stream-${stream.url}`)) return;
-    tracks.push({ url: stream.url, title: stream.name || 'Live station', artist: 'Live radio', mood: 'neon', stream: true, key: `stream-${stream.url}` });
+    if (!stream || !stream.url) return;
+    const key = 'stream-' + stream.url;
+    if (tracks.some(track => trackKey(track) === key)) return;
+    tracks.push({ url: stream.url, title: stream.name || 'Live station', artist: 'Live radio', mood: 'neon', stream: true, key });
   });
 }
 
@@ -584,7 +586,7 @@ function setMessage(text) {
 }
 
 function shortenArtworkText(text, maximumLength = 28) {
-  return text.length > maximumLength ? `${text.slice(0, maximumLength - 3).trimEnd()}...` : text;
+  return text.length > maximumLength ? text.slice(0, maximumLength - 3).trimEnd() + '...' : text;
 }
 
 function createMediaArtwork(track) {
@@ -1054,11 +1056,11 @@ function addFiles(files, source = 'Local collection') {
   const additions = selected
     .filter(({ file, path }) => !existingKeys.has(`${path}-${file.size}-${file.lastModified}`))
     .map(({ file, path }, index) => {
-      const key = `${path}-${file.size}-${file.lastModified}`;
+      const key = path + '-' + file.size + '-' + file.lastModified;
       const override = getTrackOverride(key);
       return {
         url: URL.createObjectURL(file),
-        title: override.title || cleanTitle(file.name) || `Track ${tracks.length + index + 1}`,
+        title: override.title || cleanTitle(file.name) || 'Track ' + (tracks.length + index + 1),
         artist: override.artist || (path.includes('/') ? path.split('/').slice(-2, -1)[0] : source),
         cover: override.cover || '',
         mood: (tracks.length + index) % 2 ? 'neon' : 'night',
@@ -1280,13 +1282,13 @@ elements.openStudio.addEventListener('click', () => {
 });
 elements.preamp.addEventListener('input', () => {
   eqSettings.preamp = Number(elements.preamp.value);
-  elements.preampValue.textContent = `${eqSettings.preamp > 0 ? '+' : ''}${eqSettings.preamp} dB`;
+  elements.preampValue.textContent = (eqSettings.preamp > 0 ? '+' : '') + eqSettings.preamp + ' dB';
   applyEqSettings(false);
 });
 elements.transition.addEventListener('change', () => {
   transitionLength = Number(elements.transition.value);
   try { localStorage.setItem('nh48-transition-length', String(transitionLength)); } catch { /* session-only setting */ }
-  setMessage(transitionLength ? `Smooth transition set to ${transitionLength / 1000} second${transitionLength === 1000 ? '' : 's'}.` : 'Smooth transition is off.');
+  setMessage(transitionLength ? 'Smooth transition set to ' + (transitionLength / 1000) + ' second' + (transitionLength === 1000 ? '' : 's') + '.' : 'Smooth transition is off.');
 });
 elements.sleepTimer.addEventListener('change', () => setSleepTimer(elements.sleepTimer.value));
 elements.resetEq.addEventListener('click', () => {
@@ -1295,7 +1297,10 @@ elements.resetEq.addEventListener('click', () => {
   setMessage('Equalizer reset to Flat.');
 });
 elements.addStream.addEventListener('click', () => elements.streamDialog.showModal());
-document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => document.querySelector(`#${button.dataset.closeDialog}`).close()));
+document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => {
+  const dialog = document.querySelector('#' + button.dataset.closeDialog);
+  if (dialog) dialog.close();
+}));
 elements.trackForm.addEventListener('submit', event => {
   event.preventDefault();
   const track = tracks[editingTrackIndex];
@@ -1364,6 +1369,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=8').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=9').catch(error => console.error('Offline setup failed:', error));
   });
 }

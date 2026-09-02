@@ -21,6 +21,7 @@ let smoothedEnergy = 0;
 let smoothedBass = 0;
 let savedDirectoryHandle = null;
 let installPrompt = null;
+let lastMediaPositionUpdate = 0;
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -345,6 +346,74 @@ function setMessage(text) {
   elements.message.textContent = text;
 }
 
+function updateMediaSession(track = tracks[current]) {
+  if (!('mediaSession' in navigator) || !track || !window.MediaMetadata) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title,
+      artist: track.artist,
+      album: 'NH 48 Radio',
+      artwork: [{
+        src: new URL('icons/icon.svg', window.location.href).href,
+        sizes: '512x512',
+        type: 'image/svg+xml'
+      }]
+    });
+    navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+  } catch {
+    // Media controls are an enhancement; regular playback continues if unavailable.
+  }
+}
+
+function updateMediaPosition() {
+  if (!('mediaSession' in navigator) || !Number.isFinite(audio.duration) || audio.duration <= 0) return;
+  const now = Date.now();
+  if (now - lastMediaPositionUpdate < 800) return;
+  lastMediaPositionUpdate = now;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: audio.duration,
+      playbackRate: audio.playbackRate || 1,
+      position: Math.min(Math.max(audio.currentTime, 0), audio.duration)
+    });
+  } catch {
+    // Some browsers expose Media Session without position-state support.
+  }
+}
+
+function clearMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.metadata = null;
+    navigator.mediaSession.playbackState = 'none';
+  } catch {
+    // Nothing else is required when the API is not fully implemented.
+  }
+}
+
+function configureMediaSession() {
+  if (!('mediaSession' in navigator)) return;
+  const handlers = {
+    play: () => startPlayback().catch(() => setMessage('Press play in NH 48 to continue.')),
+    pause: () => audio.pause(),
+    previoustrack: playPrevious,
+    nexttrack: playNext,
+    seekbackward: details => { audio.currentTime = Math.max(0, audio.currentTime - (details.seekOffset || 10)); },
+    seekforward: details => { audio.currentTime = Math.min(audio.duration || Infinity, audio.currentTime + (details.seekOffset || 10)); },
+    seekto: details => {
+      if (Number.isFinite(details.seekTime)) audio.currentTime = Math.min(Math.max(details.seekTime, 0), audio.duration || details.seekTime);
+    }
+  };
+
+  Object.entries(handlers).forEach(([action, handler]) => {
+    try {
+      navigator.mediaSession.setActionHandler(action, handler);
+    } catch {
+      // Unsupported actions are skipped individually.
+    }
+  });
+}
+
 function setTheme(theme) {
   const neon = theme === 'neon';
   document.body.classList.toggle('theme-neon', neon);
@@ -448,6 +517,7 @@ function loadTrack(index, shouldPlay = false) {
   elements.duration.textContent = '0:00';
   elements.progress.value = 0;
   setTheme(track.mood === 'neon' ? 'neon' : 'night');
+  updateMediaSession(track);
   setMessage(`Track ${current + 1} of ${tracks.length}`);
   renderPlaylist();
 
@@ -559,6 +629,7 @@ function clearPlaylist() {
   elements.progress.value = 0;
   document.body.classList.remove('is-playing');
   elements.play.dataset.playing = 'false';
+  clearMediaSession();
   renderPlaylist();
   setMessage('Playlist cleared. Select songs to start again.');
   if (tracks.length) loadTrack(0, false);
@@ -568,17 +639,20 @@ audio.volume = Number(elements.volume.value) / 100;
 
 audio.addEventListener('loadedmetadata', () => {
   elements.duration.textContent = formatTime(audio.duration);
+  updateMediaPosition();
 });
 
 audio.addEventListener('timeupdate', () => {
   elements.progress.value = audio.duration ? Math.round((audio.currentTime / audio.duration) * 1000) : 0;
   elements.elapsed.textContent = formatTime(audio.currentTime);
+  updateMediaPosition();
 });
 
 audio.addEventListener('play', () => {
   elements.play.dataset.playing = 'true';
   elements.play.setAttribute('aria-label', 'Pause track');
   document.body.classList.add('is-playing');
+  updateMediaSession();
   startVisualizer();
   renderPlaylist();
 });
@@ -587,6 +661,7 @@ audio.addEventListener('pause', () => {
   elements.play.dataset.playing = 'false';
   elements.play.setAttribute('aria-label', 'Play track');
   document.body.classList.remove('is-playing');
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
   stopVisualizer();
   renderPlaylist();
 });
@@ -682,6 +757,7 @@ window.addEventListener('appinstalled', () => {
 window.addEventListener('resize', drawIdleVisualizer);
 
 setTheme('night');
+configureMediaSession();
 renderPlaylist();
 drawIdleVisualizer();
 if (tracks.length) loadTrack(0, false);

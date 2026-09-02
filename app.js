@@ -25,6 +25,8 @@ let lastMediaPositionUpdate = 0;
 let openQueueMenuIndex = null;
 let draggedTrackIndex = null;
 let priorityNextKey = null;
+let mediaArtworkUrl = null;
+let mediaArtworkRequest = 0;
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -349,20 +351,112 @@ function setMessage(text) {
   elements.message.textContent = text;
 }
 
-function updateMediaSession(track = tracks[current]) {
+function shortenArtworkText(text, maximumLength = 28) {
+  return text.length > maximumLength ? `${text.slice(0, maximumLength - 1).trimEnd()}…` : text;
+}
+
+function createMediaArtwork(track) {
+  return new Promise(resolve => {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 512;
+      canvas.height = 512;
+      const context = canvas.getContext('2d');
+      const neon = track.mood === 'neon';
+      const accent = neon ? '#ff3d9f' : '#ff6738';
+      const glow = neon ? '#57ddff' : '#f3b35c';
+      const background = context.createLinearGradient(0, 0, 512, 512);
+      background.addColorStop(0, neon ? '#1d1026' : '#211313');
+      background.addColorStop(.52, '#111218');
+      background.addColorStop(1, '#07080c');
+      context.fillStyle = background;
+      context.fillRect(0, 0, 512, 512);
+
+      context.strokeStyle = 'rgba(255,255,255,.08)';
+      context.lineWidth = 2;
+      for (let offset = -220; offset < 620; offset += 54) {
+        context.beginPath();
+        context.moveTo(offset, 0);
+        context.lineTo(offset - 150, 512);
+        context.stroke();
+      }
+
+      const radial = context.createRadialGradient(360, 110, 15, 360, 110, 260);
+      radial.addColorStop(0, `${accent}66`);
+      radial.addColorStop(1, 'transparent');
+      context.fillStyle = radial;
+      context.fillRect(0, 0, 512, 512);
+
+      context.beginPath();
+      context.arc(164, 190, 112, 0, Math.PI * 2);
+      context.fillStyle = '#0a0b10';
+      context.fill();
+      context.lineWidth = 6;
+      for (let radius = 26; radius < 112; radius += 16) {
+        context.beginPath();
+        context.arc(164, 190, radius, 0, Math.PI * 2);
+        context.strokeStyle = 'rgba(255,255,255,.08)';
+        context.stroke();
+      }
+      context.beginPath();
+      context.arc(164, 190, 32, 0, Math.PI * 2);
+      context.fillStyle = accent;
+      context.fill();
+      context.fillStyle = '#fff8f0';
+      context.font = '900 20px Arial, sans-serif';
+      context.textAlign = 'center';
+      context.fillText('NH 48', 164, 197);
+
+      context.fillStyle = accent;
+      context.fillRect(52, 326, 408, 2);
+      context.fillStyle = 'rgba(255,255,255,.58)';
+      context.font = '800 14px Arial, sans-serif';
+      context.letterSpacing = '2px';
+      context.fillText('LIVE FROM THE HIGHWAY', 256, 365);
+      context.fillStyle = '#fff8f0';
+      context.font = '600 38px Georgia, serif';
+      context.fillText(shortenArtworkText(track.title), 256, 412);
+      context.fillStyle = glow;
+      context.font = '500 20px Arial, sans-serif';
+      context.fillText(shortenArtworkText(track.artist, 36), 256, 449);
+      context.fillStyle = 'rgba(255,255,255,.35)';
+      context.font = '700 12px Arial, sans-serif';
+      context.fillText('NH 48 RADIO  •  AFTER DARK', 256, 483);
+
+      canvas.toBlob(blob => resolve(blob ? URL.createObjectURL(blob) : null), 'image/png');
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function updateMediaSession(track = tracks[current]) {
   if (!('mediaSession' in navigator) || !track || !window.MediaMetadata) return;
+  const request = ++mediaArtworkRequest;
+  const fallbackArtwork = new URL('icons/icon.svg', window.location.href).href;
+  let artwork = fallbackArtwork;
+
   try {
+    const generatedArtwork = await createMediaArtwork(track);
+    if (request !== mediaArtworkRequest) {
+      if (generatedArtwork) URL.revokeObjectURL(generatedArtwork);
+      return;
+    }
+    if (mediaArtworkUrl?.startsWith('blob:')) URL.revokeObjectURL(mediaArtworkUrl);
+    mediaArtworkUrl = generatedArtwork || fallbackArtwork;
+    artwork = mediaArtworkUrl;
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
       artist: track.artist,
       album: 'NH 48 Radio',
       artwork: [{
-        src: new URL('icons/icon.svg', window.location.href).href,
+        src: artwork,
         sizes: '512x512',
-        type: 'image/svg+xml'
+        type: generatedArtwork ? 'image/png' : 'image/svg+xml'
       }]
     });
     navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
+    document.documentElement.dataset.mediaArtwork = generatedArtwork ? 'ready' : 'fallback';
   } catch {
     // Media controls are an enhancement; regular playback continues if unavailable.
   }
@@ -387,6 +481,10 @@ function updateMediaPosition() {
 function clearMediaSession() {
   if (!('mediaSession' in navigator)) return;
   try {
+    mediaArtworkRequest += 1;
+    if (mediaArtworkUrl?.startsWith('blob:')) URL.revokeObjectURL(mediaArtworkUrl);
+    mediaArtworkUrl = null;
+    delete document.documentElement.dataset.mediaArtwork;
     navigator.mediaSession.metadata = null;
     navigator.mediaSession.playbackState = 'none';
   } catch {
@@ -943,6 +1041,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=3').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=4').catch(error => console.error('Offline setup failed:', error));
   });
 }

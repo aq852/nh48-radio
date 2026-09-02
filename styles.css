@@ -17,6 +17,8 @@
 * { box-sizing: border-box; }
 html { min-width: 320px; background: var(--bg); }
 body { margin: 0; min-width: 320px; min-height: 100svh; color: var(--text); background: var(--bg); }
+.drop-zone { position: fixed; inset: 18px; z-index: 20; display: none; place-items: center; border: 2px dashed var(--accent); border-radius: 16px; background: rgba(8,9,14,.92); color: var(--text); font-size: .75rem; font-weight: 800; letter-spacing: .16em; pointer-events: none; }
+.drop-zone.is-visible { display: grid; }
 button, input { font: inherit; }
 button { color: inherit; }
 
@@ -121,6 +123,13 @@ button { color: inherit; }
 .song-count { color: var(--muted); font-size: .58rem; letter-spacing: .14em; }
 .queue-tools { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 14px 0 3px; }
 .filter-buttons { display: flex; gap: 6px; }
+.library-view { margin: 12px 0 4px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.025); }
+.library-tabs { display: flex; gap: 8px; margin-bottom: 9px; }
+.library-tabs button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: .54rem; letter-spacing: .1em; cursor: pointer; padding: 4px 2px; }
+.library-tabs button.active { color: var(--accent); }
+.library-list { display: grid; gap: 6px; color: var(--muted); font-size: .7rem; }
+.library-item { display: grid; gap: 2px; text-align: left; padding: 9px; cursor: pointer; border: 1px solid var(--line); border-radius: 7px; background: transparent; color: var(--text); }
+.library-item span { color: var(--muted); font-size: .66rem; }
 .search-box { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(0,0,0,.12); }
 .search-box:focus-within { border-color: rgba(255,255,255,.3); }
 .search-box svg { width: 16px; fill: none; stroke: var(--muted); stroke-width: 1.6; }

@@ -25,6 +25,9 @@ let draggedTrackIndex = null;
 let priorityNextKey = null;
 let mediaArtworkUrl = null;
 let mediaArtworkRequest = 0;
+let libraryVisible = false;
+let libraryTab = 'albums';
+let recentTrackKeys = readRecentTracks();
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -57,7 +60,11 @@ const elements = {
   libraryStatus: document.querySelector('#library-status'),
   libraryTitle: document.querySelector('#library-title'),
   libraryCopy: document.querySelector('#library-copy'),
-  installApp: document.querySelector('#install-app')
+  installApp: document.querySelector('#install-app'),
+  libraryToggle: document.querySelector('#show-library'),
+  libraryView: document.querySelector('#library-view'),
+  libraryList: document.querySelector('#library-list'),
+  dropZone: document.querySelector('#drop-zone')
 };
 
 const visualizerContext = elements.visualizer.getContext('2d');
@@ -192,6 +199,24 @@ function trackKey(track) {
 
 function isFavorite(track) {
   return favoriteKeys.has(trackKey(track));
+}
+
+function readRecentTracks() { try { const stored = JSON.parse(localStorage.getItem('nh48-recent-tracks') || '[]'); return Array.isArray(stored) ? stored : []; } catch { return []; } }
+function rememberRecentTrack(track) { const key = trackKey(track); recentTrackKeys = [key, ...recentTrackKeys.filter(item => item !== key)].slice(0, 12); try { localStorage.setItem('nh48-recent-tracks', JSON.stringify(recentTrackKeys)); } catch {} }
+function renderLibrary() {
+  elements.libraryView.hidden = !libraryVisible;
+  if (!libraryVisible) return;
+  elements.libraryList.replaceChildren();
+  document.querySelectorAll('[data-library-tab]').forEach(button => button.classList.toggle('active', button.dataset.libraryTab === libraryTab));
+  const items = libraryTab === 'recent'
+    ? recentTrackKeys.map(key => tracks.find(track => trackKey(track) === key)).filter(Boolean).map(track => ({ name: track.title, detail: track.artist, index: tracks.indexOf(track) }))
+    : [...new Map(tracks.map((track, index) => {
+      const name = libraryTab === 'artists' ? track.artist : (track.collection || 'Local collection');
+      const item = { name, detail: libraryTab === 'albums' ? track.artist : '', index };
+      return [name, item];
+    })).values()];
+  if (!items.length) { elements.libraryList.textContent = 'Add music to build your local library.'; return; }
+  items.forEach(item => { const button = document.createElement('button'); button.type = 'button'; button.className = 'library-item'; button.dataset.index = String(item.index); button.innerHTML = '<strong>' + item.name + '</strong><span>' + (item.detail || 'Play a song') + '</span>'; elements.libraryList.append(button); });
 }
 
 function formatTime(seconds) {
@@ -713,6 +738,7 @@ function renderPlaylist() {
   elements.clear.disabled = !hasTracks;
   elements.songCount.textContent = `${tracks.length} ${tracks.length === 1 ? 'SONG' : 'SONGS'}`;
   updateFavoriteCurrent();
+  renderLibrary();
 }
 
 function loadTrack(index, shouldPlay = false) {
@@ -807,6 +833,7 @@ function addFiles(files, source = 'Local collection') {
       url: URL.createObjectURL(file),
       title: cleanTitle(file.name) || `Track ${tracks.length + index + 1}`,
       artist: path.includes('/') ? path.split('/').slice(-2, -1)[0] : source,
+      collection: path.includes('/') ? path.split('/').slice(0, -1).join('/') : source,
       mood: (tracks.length + index) % 2 ? 'neon' : 'night',
       local: true,
       key: `${path}-${file.size}-${file.lastModified}`
@@ -875,6 +902,7 @@ audio.addEventListener('play', () => {
   elements.play.setAttribute('aria-label', 'Pause track');
   document.body.classList.add('is-playing');
   updateMediaSession();
+  if (tracks[current]) rememberRecentTrack(tracks[current]);
   startVisualizer();
   renderPlaylist();
 });
@@ -895,6 +923,11 @@ audio.addEventListener('error', () => {
 });
 
 document.querySelector('#add-songs').addEventListener('click', () => elements.fileInput.click());
+let dragDepth = 0;
+window.addEventListener('dragenter', event => { if (event.dataTransfer?.types?.includes('Files')) { event.preventDefault(); dragDepth += 1; elements.dropZone.classList.add('is-visible'); } });
+window.addEventListener('dragover', event => { if (event.dataTransfer?.types?.includes('Files')) event.preventDefault(); });
+window.addEventListener('dragleave', event => { if (event.dataTransfer?.types?.includes('Files')) { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) elements.dropZone.classList.remove('is-visible'); } });
+window.addEventListener('drop', event => { if (event.dataTransfer?.files?.length) { event.preventDefault(); dragDepth = 0; elements.dropZone.classList.remove('is-visible'); addFiles(event.dataTransfer.files, 'Dropped music'); } });
 elements.scanFolder.addEventListener('click', scanMusicFolder);
 elements.fileInput.addEventListener('change', () => {
   addFiles(elements.fileInput.files);
@@ -989,6 +1022,9 @@ elements.favoritesFilter.addEventListener('click', () => {
   elements.favoritesFilter.setAttribute('aria-pressed', String(favoritesOnly));
   renderPlaylist();
 });
+elements.libraryToggle.addEventListener('click', () => { libraryVisible = !libraryVisible; elements.libraryToggle.setAttribute('aria-pressed', String(libraryVisible)); renderLibrary(); });
+document.querySelectorAll('[data-library-tab]').forEach(button => button.addEventListener('click', () => { libraryTab = button.dataset.libraryTab; renderLibrary(); }));
+elements.libraryList.addEventListener('click', event => { const button = event.target.closest('.library-item'); if (button) loadTrack(Number(button.dataset.index), true); });
 elements.shuffle.addEventListener('click', () => {
   shuffleEnabled = !shuffleEnabled;
   elements.shuffle.setAttribute('aria-pressed', String(shuffleEnabled));
@@ -1039,6 +1075,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=11').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=12').catch(error => console.error('Offline setup failed:', error));
   });
 }

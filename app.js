@@ -1,4 +1,5 @@
 const audio = new Audio();
+audio.crossOrigin = 'anonymous';
 const LIBRARY_DB = 'nh48-radio-library';
 const LIBRARY_STORE = 'settings';
 const DIRECTORY_HANDLE_KEY = 'music-directory';
@@ -6,6 +7,14 @@ const DIRECTORY_HANDLE_KEY = 'music-directory';
 // Add permanently hosted songs here after placing the files in /songs.
 // Example: { url: 'songs/night-drive.mp3', title: 'Night Drive', artist: 'Artist', mood: 'night' }
 const bundledTracks = [];
+const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const EQ_PRESETS = {
+  Flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  'Night Drive': [3, 2, 1, 0, -1, 0, 1, 2, 3, 2],
+  Bass: [6, 5, 3, 1, 0, 0, 0, 0, 0, 0],
+  Vocal: [-1, 0, 1, 3, 4, 4, 3, 1, 0, -1],
+  Rock: [4, 3, 1, -1, -2, 0, 2, 3, 4, 3]
+};
 let tracks = [...bundledTracks];
 let current = -1;
 let shuffleEnabled = false;
@@ -27,6 +36,21 @@ let draggedTrackIndex = null;
 let priorityNextKey = null;
 let mediaArtworkUrl = null;
 let mediaArtworkRequest = 0;
+let eqFilters = [];
+let preampNode;
+let eqSettings = readStoredObject('nh48-eq-settings', { bands: EQ_PRESETS.Flat, preamp: 0, preset: 'Flat' });
+if (!Array.isArray(eqSettings.bands) || eqSettings.bands.length !== EQ_FREQUENCIES.length) eqSettings = { bands: [...EQ_PRESETS.Flat], preamp: 0, preset: 'Flat' };
+let transitionLength = Number(readStoredValue('nh48-transition-length', '0'));
+let sleepTimerId = null;
+let sleepEndsAt = 0;
+let editingTrackIndex = -1;
+let editingCover = '';
+let topOnly = false;
+let playCounts = readStoredObject('nh48-play-counts', {});
+let countedTrackKey = null;
+let trackOverrides = readStoredObject('nh48-track-overrides', {});
+let savedStreams = readStoredObject('nh48-streams', []);
+if (!Array.isArray(savedStreams)) savedStreams = [];
 
 const elements = {
   title: document.querySelector('#song-title'),
@@ -59,7 +83,28 @@ const elements = {
   libraryStatus: document.querySelector('#library-status'),
   libraryTitle: document.querySelector('#library-title'),
   libraryCopy: document.querySelector('#library-copy'),
-  installApp: document.querySelector('#install-app')
+  installApp: document.querySelector('#install-app'),
+  topFilter: document.querySelector('#show-top'),
+  studio: document.querySelector('#studio-dialog'),
+  openStudio: document.querySelector('#open-studio'),
+  eqPresets: document.querySelector('#eq-presets'),
+  eqBands: document.querySelector('#eq-bands'),
+  preamp: document.querySelector('#preamp'),
+  preampValue: document.querySelector('#preamp-value'),
+  transition: document.querySelector('#transition-length'),
+  sleepTimer: document.querySelector('#sleep-timer'),
+  resetEq: document.querySelector('#reset-eq'),
+  trackDialog: document.querySelector('#track-dialog'),
+  trackForm: document.querySelector('#track-form'),
+  editTitle: document.querySelector('#edit-title'),
+  editArtist: document.querySelector('#edit-artist'),
+  editCover: document.querySelector('#edit-cover'),
+  coverNote: document.querySelector('#cover-note'),
+  streamDialog: document.querySelector('#stream-dialog'),
+  streamForm: document.querySelector('#stream-form'),
+  streamName: document.querySelector('#stream-name'),
+  streamUrl: document.querySelector('#stream-url'),
+  addStream: document.querySelector('#add-stream')
 };
 
 const visualizerContext = elements.visualizer.getContext('2d');
@@ -97,7 +142,21 @@ function ensureAudioGraph() {
     analyser.fftSize = 128;
     analyser.smoothingTimeConstant = .82;
     mediaSource = audioContext.createMediaElementSource(audio);
-    mediaSource.connect(analyser);
+    preampNode = audioContext.createGain();
+    eqFilters = EQ_FREQUENCIES.map((frequency, index) => {
+      const filter = audioContext.createBiquadFilter();
+      filter.type = 'peaking';
+      filter.frequency.value = frequency;
+      filter.Q.value = 1.1;
+      filter.gain.value = Number(eqSettings.bands[index] || 0);
+      return filter;
+    });
+    preampNode.gain.value = Math.pow(10, Number(eqSettings.preamp || 0) / 20);
+    mediaSource.connect(preampNode);
+    eqFilters.reduce((source, filter) => {
+      source.connect(filter);
+      return filter;
+    }, preampNode).connect(analyser);
     analyser.connect(audioContext.destination);
     frequencyData = new Uint8Array(analyser.frequencyBinCount);
     document.documentElement.classList.add('web-audio-ready');
@@ -169,6 +228,109 @@ async function startPlayback() {
   return audio.play();
 }
 
+function readStoredValue(key, fallback) {
+  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+}
+
+function readStoredObject(key, fallback) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || 'null');
+    return value && typeof value === 'object' ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredObject(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { setMessage('This setting could not be saved in this browser.'); }
+}
+
+function formatFrequency(frequency) {
+  return frequency >= 1000 ? `${frequency / 1000}k` : String(frequency);
+}
+
+function applyEqSettings(render = true) {
+  eqSettings.bands = EQ_FREQUENCIES.map((_, index) => Number(eqSettings.bands[index] || 0));
+  eqFilters.forEach((filter, index) => { filter.gain.value = eqSettings.bands[index]; });
+  if (preampNode) preampNode.gain.value = Math.pow(10, Number(eqSettings.preamp || 0) / 20);
+  saveStoredObject('nh48-eq-settings', eqSettings);
+  if (render) renderStudioControls();
+}
+
+function renderStudioControls() {
+  if (!elements.eqBands) return;
+  elements.eqPresets.replaceChildren();
+  Object.keys(EQ_PRESETS).forEach(name => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `eq-preset${eqSettings.preset === name ? ' active' : ''}`;
+    button.textContent = name.toUpperCase();
+    button.addEventListener('click', () => {
+      eqSettings = { ...eqSettings, bands: [...EQ_PRESETS[name]], preset: name };
+      applyEqSettings();
+      setMessage(`${name} EQ preset applied.`);
+    });
+    elements.eqPresets.append(button);
+  });
+
+  elements.eqBands.replaceChildren();
+  EQ_FREQUENCIES.forEach((frequency, index) => {
+    const label = document.createElement('label');
+    const value = document.createElement('output');
+    const input = document.createElement('input');
+    label.className = 'eq-band';
+    label.innerHTML = `<span>${formatFrequency(frequency)}</span>`;
+    input.type = 'range';
+    input.min = '-12';
+    input.max = '12';
+    input.step = '1';
+    input.value = String(eqSettings.bands[index]);
+    input.setAttribute('aria-label', `${formatFrequency(frequency)} equalizer band`);
+    value.textContent = `${eqSettings.bands[index] > 0 ? '+' : ''}${eqSettings.bands[index]}`;
+    input.addEventListener('input', () => {
+      eqSettings.bands[index] = Number(input.value);
+      eqSettings.preset = 'Custom';
+      value.textContent = `${input.value > 0 ? '+' : ''}${input.value}`;
+      applyEqSettings(false);
+    });
+    label.append(input, value);
+    elements.eqBands.append(label);
+  });
+  elements.preamp.value = String(eqSettings.preamp || 0);
+  elements.preampValue.textContent = `${eqSettings.preamp > 0 ? '+' : ''}${eqSettings.preamp} dB`;
+  elements.transition.value = String(transitionLength);
+  elements.sleepTimer.value = sleepEndsAt > Date.now() ? String(Math.ceil((sleepEndsAt - Date.now()) / 60000)) : '0';
+}
+
+function setSleepTimer(minutes) {
+  clearTimeout(sleepTimerId);
+  const duration = Number(minutes) || 0;
+  sleepEndsAt = duration ? Date.now() + duration * 60_000 : 0;
+  if (!duration) {
+    setMessage('Sleep timer is off.');
+    return;
+  }
+  sleepTimerId = window.setTimeout(() => {
+    audio.pause();
+    sleepEndsAt = 0;
+    elements.sleepTimer.value = '0';
+    setMessage('Sleep timer finished. Good night.');
+  }, duration * 60_000);
+  setMessage(`Sleep timer set for ${duration} minutes.`);
+}
+
+function fadeInCurrentTrack(duration) {
+  if (!duration) return;
+  const targetVolume = Number(elements.volume.value) / 100;
+  const started = performance.now();
+  audio.volume = 0;
+  const fade = now => {
+    audio.volume = targetVolume * Math.min((now - started) / duration, 1);
+    if (now - started < duration && !audio.paused) requestAnimationFrame(fade);
+  };
+  requestAnimationFrame(fade);
+}
+
 function readFavorites() {
   try {
     const stored = JSON.parse(localStorage.getItem('nh48-favorites') || '[]');
@@ -194,6 +356,67 @@ function trackKey(track) {
 
 function isFavorite(track) {
   return favoriteKeys.has(trackKey(track));
+}
+
+function getTrackOverride(key) {
+  return trackOverrides[key] && typeof trackOverrides[key] === 'object' ? trackOverrides[key] : {};
+}
+
+function saveTrackOverride(track) {
+  trackOverrides[trackKey(track)] = { title: track.title, artist: track.artist, cover: track.cover || '' };
+  saveStoredObject('nh48-track-overrides', trackOverrides);
+}
+
+function openTrackEditor(index) {
+  const track = tracks[index];
+  if (!track) return;
+  editingTrackIndex = index;
+  editingCover = track.cover || '';
+  elements.editTitle.value = track.title;
+  elements.editArtist.value = track.artist;
+  elements.editCover.value = '';
+  elements.coverNote.textContent = editingCover ? 'A custom lock-screen cover is already saved for this track.' : 'Images stay only in this browser. Use a file under 750 KB.';
+  elements.trackDialog.showModal();
+}
+
+function updateCurrentTrackCopy() {
+  const track = tracks[current];
+  if (!track) return;
+  elements.title.textContent = track.title;
+  elements.artist.textContent = track.artist;
+  elements.coverInitial.textContent = track.title.slice(0, 2).toUpperCase();
+  updateMediaSession(track);
+  updateFavoriteCurrent();
+}
+
+function addStream(name, url) {
+  const normalizedUrl = url.trim();
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    setMessage('Use a full https:// stream URL.');
+    return false;
+  }
+  const key = `stream-${normalizedUrl}`;
+  if (tracks.some(track => trackKey(track) === key)) {
+    setMessage('That station is already in your queue.');
+    return false;
+  }
+  const stream = { url: normalizedUrl, title: name.trim() || 'Live station', artist: 'Live radio', mood: 'neon', stream: true, key };
+  tracks.push(stream);
+  if (!savedStreams.some(item => item.url === normalizedUrl)) {
+    savedStreams.push({ name: stream.title, url: stream.url });
+    saveStoredObject('nh48-streams', savedStreams);
+  }
+  renderPlaylist();
+  if (current === -1) loadTrack(0, false);
+  setMessage(`${stream.title} added as a live station.`);
+  return true;
+}
+
+function restoreSavedStreams() {
+  savedStreams.forEach(stream => {
+    if (!stream?.url || tracks.some(track => trackKey(track) === `stream-${stream.url}`)) return;
+    tracks.push({ url: stream.url, title: stream.name || 'Live station', artist: 'Live radio', mood: 'neon', stream: true, key: `stream-${stream.url}` });
+  });
 }
 
 function formatTime(seconds) {
@@ -434,17 +657,26 @@ async function updateMediaSession(track = tracks[current]) {
   if (!('mediaSession' in navigator) || !track || !window.MediaMetadata) return;
   const request = ++mediaArtworkRequest;
   const fallbackArtwork = new URL('icons/icon.svg', window.location.href).href;
-  let artwork = fallbackArtwork;
+  let artwork = track.cover || fallbackArtwork;
 
   try {
-    const generatedArtwork = await createMediaArtwork(track);
+    const generatedArtwork = track.cover ? null : await createMediaArtwork(track);
     if (request !== mediaArtworkRequest) {
       if (generatedArtwork) URL.revokeObjectURL(generatedArtwork);
       return;
     }
     if (mediaArtworkUrl?.startsWith('blob:')) URL.revokeObjectURL(mediaArtworkUrl);
-    mediaArtworkUrl = generatedArtwork || fallbackArtwork;
+    mediaArtworkUrl = generatedArtwork || track.cover || fallbackArtwork;
     artwork = mediaArtworkUrl;
+    const artworkType = generatedArtwork
+      ? 'image/png'
+      : track.cover?.startsWith('data:image/jpeg')
+        ? 'image/jpeg'
+        : track.cover?.startsWith('data:image/png')
+          ? 'image/png'
+          : track.cover?.startsWith('data:image/webp')
+            ? 'image/webp'
+            : 'image/svg+xml';
     navigator.mediaSession.metadata = new MediaMetadata({
       title: track.title,
       artist: track.artist,
@@ -452,7 +684,7 @@ async function updateMediaSession(track = tracks[current]) {
       artwork: [{
         src: artwork,
         sizes: '512x512',
-        type: generatedArtwork ? 'image/png' : 'image/svg+xml'
+        type: artworkType
       }]
     });
     navigator.mediaSession.playbackState = audio.paused ? 'paused' : 'playing';
@@ -628,7 +860,8 @@ function renderPlaylist() {
     .map((track, index) => ({ track, index }))
     .filter(({ track }) => {
       const matchesSearch = `${track.title} ${track.artist}`.toLowerCase().includes(searchQuery);
-      return matchesSearch && (!favoritesOnly || isFavorite(track));
+      const matchesTop = !topOnly || (playCounts[trackKey(track)] || 0) > 0;
+      return matchesSearch && matchesTop && (!favoritesOnly || isFavorite(track));
     });
 
   visibleTracks.forEach(({ track, index }) => {
@@ -692,6 +925,7 @@ function renderPlaylist() {
       ['next', 'PLAY NEXT'],
       ['up', 'MOVE UP'],
       ['down', 'MOVE DOWN'],
+      ['edit', 'EDIT INFO'],
       ['remove', 'REMOVE']
     ].forEach(([action, label]) => {
       const option = document.createElement('button');
@@ -717,7 +951,7 @@ function renderPlaylist() {
   updateFavoriteCurrent();
 }
 
-function loadTrack(index, shouldPlay = false) {
+function loadTrack(index, shouldPlay = false, smoothTransition = false) {
   if (!tracks.length) {
     setMessage('Add songs to start your road queue.');
     return;
@@ -726,6 +960,7 @@ function loadTrack(index, shouldPlay = false) {
   current = (index + tracks.length) % tracks.length;
   const track = tracks[current];
   if (priorityNextKey === trackKey(track)) priorityNextKey = null;
+  countedTrackKey = null;
   audio.src = track.url;
   elements.title.textContent = track.title;
   elements.artist.textContent = track.artist;
@@ -738,7 +973,11 @@ function loadTrack(index, shouldPlay = false) {
   setMessage(`Track ${current + 1} of ${tracks.length}`);
   renderPlaylist();
 
-  if (shouldPlay) startPlayback().catch(() => setMessage('Press play to continue.'));
+  if (shouldPlay) {
+    startPlayback()
+      .then(() => fadeInCurrentTrack(smoothTransition ? transitionLength : 0))
+      .catch(() => setMessage('Press play to continue.'));
+  }
 }
 
 function getNextIndex() {
@@ -758,14 +997,14 @@ function getNextIndex() {
   return current < tracks.length - 1 ? current + 1 : 0;
 }
 
-function playNext() {
+function playNext(smooth = false) {
   const next = getNextIndex();
   if (next === -1) {
     audio.pause();
     setMessage('You reached the end of the queue.');
     return;
   }
-  loadTrack(next, true);
+  loadTrack(next, true, smooth);
 }
 
 function playPrevious() {
@@ -805,14 +1044,19 @@ function addFiles(files, source = 'Local collection') {
   const existingKeys = new Set(tracks.map(trackKey));
   const additions = selected
     .filter(({ file, path }) => !existingKeys.has(`${path}-${file.size}-${file.lastModified}`))
-    .map(({ file, path }, index) => ({
-      url: URL.createObjectURL(file),
-      title: cleanTitle(file.name) || `Track ${tracks.length + index + 1}`,
-      artist: path.includes('/') ? path.split('/').slice(-2, -1)[0] : source,
-      mood: (tracks.length + index) % 2 ? 'neon' : 'night',
-      local: true,
-      key: `${path}-${file.size}-${file.lastModified}`
-    }));
+    .map(({ file, path }, index) => {
+      const key = `${path}-${file.size}-${file.lastModified}`;
+      const override = getTrackOverride(key);
+      return {
+        url: URL.createObjectURL(file),
+        title: override.title || cleanTitle(file.name) || `Track ${tracks.length + index + 1}`,
+        artist: override.artist || (path.includes('/') ? path.split('/').slice(-2, -1)[0] : source),
+        cover: override.cover || '',
+        mood: (tracks.length + index) % 2 ? 'neon' : 'night',
+        local: true,
+        key
+      };
+    });
 
   if (!additions.length) {
     setMessage('Those songs are already in your queue.');
@@ -877,6 +1121,12 @@ audio.addEventListener('play', () => {
   elements.play.setAttribute('aria-label', 'Pause track');
   document.body.classList.add('is-playing');
   updateMediaSession();
+  const track = tracks[current];
+  if (track && countedTrackKey !== trackKey(track)) {
+    countedTrackKey = trackKey(track);
+    playCounts[countedTrackKey] = (playCounts[countedTrackKey] || 0) + 1;
+    saveStoredObject('nh48-play-counts', playCounts);
+  }
   startVisualizer();
   renderPlaylist();
 });
@@ -890,10 +1140,10 @@ audio.addEventListener('pause', () => {
   renderPlaylist();
 });
 
-audio.addEventListener('ended', playNext);
+audio.addEventListener('ended', () => playNext(true));
 
 audio.addEventListener('error', () => {
-  if (audio.src) setMessage('This file could not be played. Try another audio format.');
+  if (audio.src) setMessage(tracks[current]?.stream ? 'This stream could not play. Try a browser-compatible station URL.' : 'This file could not be played. Try another audio format.');
 });
 
 document.querySelector('#add-songs').addEventListener('click', () => elements.fileInput.click());
@@ -923,6 +1173,7 @@ elements.playlist.addEventListener('click', event => {
     } else if (action === 'next') queueTrackNext(index);
     else if (action === 'up') moveTrackBy(index, -1);
     else if (action === 'down') moveTrackBy(index, 1);
+    else if (action === 'edit') openTrackEditor(index);
     else if (action === 'remove') removeTrack(index);
     return;
   }
@@ -991,6 +1242,11 @@ elements.favoritesFilter.addEventListener('click', () => {
   elements.favoritesFilter.setAttribute('aria-pressed', String(favoritesOnly));
   renderPlaylist();
 });
+elements.topFilter.addEventListener('click', () => {
+  topOnly = !topOnly;
+  elements.topFilter.setAttribute('aria-pressed', String(topOnly));
+  renderPlaylist();
+});
 elements.shuffle.addEventListener('click', () => {
   shuffleEnabled = !shuffleEnabled;
   elements.shuffle.setAttribute('aria-pressed', String(shuffleEnabled));
@@ -1008,6 +1264,63 @@ elements.volume.addEventListener('input', () => {
   audio.volume = Number(elements.volume.value) / 100;
   elements.volumeValue.value = elements.volume.value;
   elements.volumeValue.textContent = elements.volume.value;
+});
+elements.openStudio.addEventListener('click', () => {
+  renderStudioControls();
+  elements.studio.showModal();
+});
+elements.preamp.addEventListener('input', () => {
+  eqSettings.preamp = Number(elements.preamp.value);
+  elements.preampValue.textContent = `${eqSettings.preamp > 0 ? '+' : ''}${eqSettings.preamp} dB`;
+  applyEqSettings(false);
+});
+elements.transition.addEventListener('change', () => {
+  transitionLength = Number(elements.transition.value);
+  try { localStorage.setItem('nh48-transition-length', String(transitionLength)); } catch { /* session-only setting */ }
+  setMessage(transitionLength ? `Smooth transition set to ${transitionLength / 1000} second${transitionLength === 1000 ? '' : 's'}.` : 'Smooth transition is off.');
+});
+elements.sleepTimer.addEventListener('change', () => setSleepTimer(elements.sleepTimer.value));
+elements.resetEq.addEventListener('click', () => {
+  eqSettings = { bands: [...EQ_PRESETS.Flat], preamp: 0, preset: 'Flat' };
+  applyEqSettings();
+  setMessage('Equalizer reset to Flat.');
+});
+elements.addStream.addEventListener('click', () => elements.streamDialog.showModal());
+document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => document.querySelector(`#${button.dataset.closeDialog}`).close()));
+elements.trackForm.addEventListener('submit', event => {
+  event.preventDefault();
+  const track = tracks[editingTrackIndex];
+  if (!track) return;
+  track.title = elements.editTitle.value.trim();
+  track.artist = elements.editArtist.value.trim();
+  track.cover = editingCover;
+  saveTrackOverride(track);
+  updateCurrentTrackCopy();
+  renderPlaylist();
+  elements.trackDialog.close();
+  setMessage('Track details saved on this device.');
+});
+elements.editCover.addEventListener('change', () => {
+  const file = elements.editCover.files[0];
+  if (!file) return;
+  if (file.size > 750_000) {
+    elements.coverNote.textContent = 'Please choose an image smaller than 750 KB.';
+    elements.editCover.value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    editingCover = String(reader.result || '');
+    elements.coverNote.textContent = 'Custom lock-screen cover ready to save.';
+  };
+  reader.readAsDataURL(file);
+});
+elements.streamForm.addEventListener('submit', event => {
+  event.preventDefault();
+  if (addStream(elements.streamName.value, elements.streamUrl.value)) {
+    elements.streamForm.reset();
+    elements.streamDialog.close();
+  }
 });
 
 window.addEventListener('beforeinstallprompt', event => {
@@ -1034,6 +1347,7 @@ window.addEventListener('resize', drawIdleVisualizer);
 
 setTheme('night');
 configureMediaSession();
+restoreSavedStreams();
 renderPlaylist();
 drawIdleVisualizer();
 if (tracks.length) loadTrack(0, false);
@@ -1041,6 +1355,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=4').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=5').catch(error => console.error('Offline setup failed:', error));
   });
 }

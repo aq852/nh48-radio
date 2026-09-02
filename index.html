@@ -11,7 +11,7 @@
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="icons/icon.svg" />
-    <link rel="stylesheet" href="styles.css?v=5" />
+    <link rel="stylesheet" href="styles.css?v=6" />
   </head>
   <body class="theme-night">
     <main class="app-shell">
@@ -90,6 +90,7 @@
           <div class="playback-options">
             <button id="shuffle" class="option-button" type="button" aria-pressed="false">SHUFFLE</button>
             <button id="repeat" class="option-button active" type="button" data-mode="all">REPEAT ALL</button>
+            <button id="open-studio" class="option-button studio-button" type="button">SOUND STUDIO</button>
             <label class="volume-control" for="volume">
               <span>VOLUME</span>
               <input id="volume" type="range" min="0" max="100" value="85" aria-label="Volume" />
@@ -117,7 +118,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m20 20-4.4-4.4M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0z"/></svg>
               <input id="playlist-search" type="search" placeholder="Search your queue" aria-label="Search playlist" autocomplete="off" />
             </label>
-            <button id="show-favorites" class="favorites-filter" type="button" aria-pressed="false">FAVS</button>
+            <div class="filter-buttons">
+              <button id="show-favorites" class="favorites-filter" type="button" aria-pressed="false">FAVS</button>
+              <button id="show-top" class="favorites-filter" type="button" aria-pressed="false">TOP</button>
+            </div>
           </div>
 
           <ol id="playlist-list" class="playlist" aria-label="Song playlist"></ol>
@@ -141,6 +145,7 @@
               <span id="scan-folder-label">SCAN FOLDER</span>
             </button>
             <button id="add-songs" class="add-songs" type="button"><span>+</span> SONGS</button>
+            <button id="add-stream" class="add-stream" type="button">LIVE URL</button>
             <button id="clear-playlist" class="clear-playlist" type="button" disabled>CLEAR</button>
             <input id="song-files" type="file" accept="audio/mpeg,audio/mp3,audio/wav,audio/ogg,audio/*" multiple hidden />
             <input id="folder-files" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" webkitdirectory directory multiple hidden />
@@ -151,6 +156,42 @@
 
       <footer><span>NH 48 / AFTER DARK</span><span>DRIVE SAFE</span></footer>
     </main>
-    <script src="app.js?v=5" defer></script>
+
+    <dialog id="studio-dialog" class="studio-dialog" aria-labelledby="studio-title">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-header"><div><p class="eyebrow">NH 48 LABS</p><h2 id="studio-title">Sound studio</h2></div><button class="dialog-close" value="cancel" aria-label="Close sound studio">×</button></div>
+        <p class="dialog-copy">Tune the local player with a 10-band equalizer. These settings stay on this device.</p>
+        <div id="eq-presets" class="eq-presets" aria-label="Equalizer presets"></div>
+        <label class="studio-slider" for="preamp"><span>PREAMP</span><input id="preamp" type="range" min="-12" max="12" step="1" value="0" /><output id="preamp-value">0 dB</output></label>
+        <div id="eq-bands" class="eq-bands" aria-label="10 band equalizer"></div>
+        <div class="studio-options">
+          <label for="transition-length"><span>SMOOTH TRANSITION</span><select id="transition-length"><option value="0">Off</option><option value="500">0.5 seconds</option><option value="1000">1 second</option><option value="2000">2 seconds</option></select></label>
+          <label for="sleep-timer"><span>SLEEP TIMER</span><select id="sleep-timer"><option value="0">Off</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option></select></label>
+        </div>
+        <div class="dialog-actions"><button id="reset-eq" class="dialog-secondary" type="button">RESET EQ</button><button class="dialog-primary" value="close">DONE</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="track-dialog" class="studio-dialog" aria-labelledby="track-dialog-title">
+      <form id="track-form" class="dialog-card">
+        <div class="dialog-header"><div><p class="eyebrow">LOCAL METADATA</p><h2 id="track-dialog-title">Edit track</h2></div><button class="dialog-close" type="button" data-close-dialog="track-dialog" aria-label="Close track editor">×</button></div>
+        <label class="dialog-field" for="edit-title"><span>TITLE</span><input id="edit-title" required maxlength="80" /></label>
+        <label class="dialog-field" for="edit-artist"><span>ARTIST</span><input id="edit-artist" required maxlength="80" /></label>
+        <label class="dialog-field" for="edit-cover"><span>CUSTOM LOCK-SCREEN COVER (OPTIONAL)</span><input id="edit-cover" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+        <p id="cover-note" class="dialog-copy">Images stay only in this browser. Use a file under 750 KB.</p>
+        <div class="dialog-actions"><button class="dialog-secondary" type="button" data-close-dialog="track-dialog">CANCEL</button><button class="dialog-primary" type="submit">SAVE DETAILS</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="stream-dialog" class="studio-dialog" aria-labelledby="stream-dialog-title">
+      <form id="stream-form" class="dialog-card">
+        <div class="dialog-header"><div><p class="eyebrow">LIVE RADIO</p><h2 id="stream-dialog-title">Add a stream</h2></div><button class="dialog-close" type="button" data-close-dialog="stream-dialog" aria-label="Close stream editor">×</button></div>
+        <label class="dialog-field" for="stream-name"><span>STATION NAME</span><input id="stream-name" required maxlength="80" placeholder="NH 48 Live" /></label>
+        <label class="dialog-field" for="stream-url"><span>STREAM URL</span><input id="stream-url" type="url" required placeholder="https://example.com/live.mp3" /></label>
+        <p class="dialog-copy">Use a direct MP3, AAC, or HLS audio URL that allows browser playback.</p>
+        <div class="dialog-actions"><button class="dialog-secondary" type="button" data-close-dialog="stream-dialog">CANCEL</button><button class="dialog-primary" type="submit">ADD STATION</button></div>
+      </form>
+    </dialog>
+    <script src="app.js?v=6" defer></script>
   </body>
 </html>

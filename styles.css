@@ -104,10 +104,11 @@ button { color: inherit; }
 .pause-icon { display: none; }
 .play-button[data-playing="true"] .play-icon { display: none; }
 .play-button[data-playing="true"] .pause-icon { display: block; }
-.playback-options { display: grid; grid-template-columns: auto auto minmax(170px, 1fr); align-items: center; gap: 9px; margin: -2px 0 18px; }
+.playback-options { display: grid; grid-template-columns: auto auto auto minmax(150px, 1fr); align-items: center; gap: 9px; margin: -2px 0 18px; }
 .option-button { min-height: 38px; cursor: pointer; padding: 0 13px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); font-size: .55rem; font-weight: 800; letter-spacing: .1em; }
 .option-button:hover, .option-button.active { color: var(--text); border-color: rgba(255,255,255,.26); background: rgba(255,255,255,.045); }
 .option-button[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.studio-button { color: var(--gold); }
 .volume-control { min-height: 38px; display: grid; grid-template-columns: auto 1fr 24px; align-items: center; gap: 9px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: .52rem; font-weight: 800; letter-spacing: .1em; }
 .volume-control input { width: 100%; height: 3px; accent-color: var(--accent); }
 .volume-control output { color: var(--text); font-variant-numeric: tabular-nums; text-align: right; }
@@ -119,6 +120,7 @@ button { color: inherit; }
 .queue-header h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.65rem; font-weight: 400; }
 .song-count { color: var(--muted); font-size: .58rem; letter-spacing: .14em; }
 .queue-tools { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin: 14px 0 3px; }
+.filter-buttons { display: flex; gap: 6px; }
 .search-box { min-height: 42px; display: flex; align-items: center; gap: 8px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(0,0,0,.12); }
 .search-box:focus-within { border-color: rgba(255,255,255,.3); }
 .search-box svg { width: 16px; fill: none; stroke: var(--muted); stroke-width: 1.6; }
@@ -177,16 +179,43 @@ button { color: inherit; }
 .library-status small { overflow: hidden; margin-top: 4px; color: var(--muted); font-size: .57rem; text-overflow: ellipsis; white-space: nowrap; }
 .library-status.connected { border-color: color-mix(in srgb, var(--accent) 38%, transparent); }
 .library-status.connected .library-status-icon { background: var(--accent); color: #0c0d12; }
-.queue-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; padding-top: 12px; }
-.scan-folder, .add-songs, .clear-playlist { min-height: 47px; cursor: pointer; border-radius: 10px; font-size: .58rem; font-weight: 800; letter-spacing: .1em; }
+.queue-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; padding-top: 12px; }
+.scan-folder, .add-songs, .add-stream, .clear-playlist { min-height: 47px; cursor: pointer; border-radius: 10px; font-size: .58rem; font-weight: 800; letter-spacing: .1em; }
 .scan-folder { min-width: 0; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; background: var(--text); color: #0d0e12; }
 .scan-folder svg { flex: none; width: 17px; fill: none; stroke: var(--accent); stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; }
 .scan-folder:disabled { cursor: wait; opacity: .62; }
 .add-songs { padding: 0 14px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--text); }
 .add-songs span { margin-right: 7px; color: var(--accent); font-size: 1.15rem; line-height: 0; }
+.add-stream { padding: 0 11px; border: 1px solid var(--line); background: transparent; color: var(--gold); }
 .clear-playlist { padding: 0 16px; border: 1px solid var(--line); background: transparent; color: var(--muted); }
 .clear-playlist:disabled { cursor: not-allowed; opacity: .34; }
 .privacy-note { margin: 10px 0 0; color: #656771; font-size: .55rem; line-height: 1.5; text-align: center; }
+
+.studio-dialog { width: min(650px, calc(100vw - 28px)); max-height: min(780px, calc(100svh - 28px)); padding: 0; border: 1px solid rgba(255,255,255,.15); border-radius: 20px; background: #111218; color: var(--text); box-shadow: 0 28px 90px rgba(0,0,0,.68); }
+.studio-dialog::backdrop { background: rgba(3,4,8,.72); backdrop-filter: blur(7px); }
+.dialog-card { display: flex; flex-direction: column; gap: 18px; padding: clamp(22px, 4vw, 34px); }
+.dialog-header { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.dialog-header h2 { margin: 0; font-family: Georgia, serif; font-size: 2rem; font-weight: 400; }
+.dialog-close { display: grid; place-items: center; width: 38px; aspect-ratio: 1; cursor: pointer; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--text); font-size: 1.5rem; line-height: 1; }
+.dialog-copy { margin: -8px 0 0; color: var(--muted); font-size: .72rem; line-height: 1.55; }
+.eq-presets { display: flex; flex-wrap: wrap; gap: 7px; }
+.eq-preset { min-height: 31px; cursor: pointer; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--muted); font-size: .51rem; font-weight: 850; letter-spacing: .1em; }
+.eq-preset.active, .eq-preset:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.studio-slider { display: grid; grid-template-columns: 62px 1fr 45px; align-items: center; gap: 12px; color: var(--muted); font-size: .58rem; font-weight: 800; letter-spacing: .1em; }
+.studio-slider input { width: 100%; accent-color: var(--accent); }
+.studio-slider output { color: var(--text); font-size: .62rem; letter-spacing: 0; text-align: right; }
+.eq-bands { display: grid; grid-template-columns: repeat(10, minmax(24px, 1fr)); align-items: end; gap: 8px; min-height: 175px; padding: 15px 8px 5px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0,0,0,.16); }
+.eq-band { display: grid; grid-template-rows: 17px 1fr 15px; justify-items: center; gap: 5px; color: var(--muted); font-size: .48rem; font-weight: 800; letter-spacing: .02em; }
+.eq-band input { width: 132px; height: 17px; margin: 56px -53px; accent-color: var(--accent); transform: rotate(-90deg); }
+.eq-band output { color: var(--text); font-size: .5rem; }
+.studio-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.studio-options label, .dialog-field { display: grid; gap: 7px; color: var(--muted); font-size: .55rem; font-weight: 800; letter-spacing: .1em; }
+.studio-options select, .dialog-field input { min-height: 42px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: rgba(0,0,0,.16); color: var(--text); }
+.dialog-field input[type="file"] { padding: 10px; font-size: .6rem; }
+.dialog-actions { display: flex; justify-content: end; gap: 9px; padding-top: 2px; }
+.dialog-primary, .dialog-secondary { min-height: 40px; cursor: pointer; padding: 0 15px; border-radius: 8px; font-size: .58rem; font-weight: 850; letter-spacing: .1em; }
+.dialog-primary { border: 0; background: var(--text); color: #0d0e12; }
+.dialog-secondary { border: 1px solid var(--line); background: transparent; color: var(--muted); }
 
 footer { width: min(1180px, 100%); margin: 20px auto 0; display: flex; justify-content: space-between; color: #51535c; font-size: .53rem; letter-spacing: .19em; }
 
@@ -220,6 +249,7 @@ footer { width: min(1180px, 100%); margin: 20px auto 0; display: flex; justify-c
   .track-heading { justify-content: center; }
   .track-copy h1 { font-size: clamp(2rem, 11vw, 3.3rem); }
   .playback-options { grid-template-columns: 1fr 1fr; }
+  .studio-button { grid-column: 1 / -1; }
   .volume-control { grid-column: 1 / -1; }
   .status-bar { align-items: start; }
   #player-message { max-width: 68%; }
@@ -227,6 +257,9 @@ footer { width: min(1180px, 100%); margin: 20px auto 0; display: flex; justify-c
   .clear-playlist { grid-column: 1 / -1; min-height: 38px; }
   .playlist-row { grid-template-columns: 15px minmax(0,1fr) 33px 33px; }
   .drag-handle { font-size: .66rem; }
+  .eq-bands { gap: 2px; }
+  .eq-band input { width: 118px; margin: 50px -49px; }
+  .studio-options { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

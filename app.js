@@ -3,12 +3,7 @@ const LIBRARY_DB = 'nh48-radio-library';
 const LIBRARY_STORE = 'settings';
 const DIRECTORY_HANDLE_KEY = 'music-directory';
 
-// Official demo streams, ready to play when the app opens.
-const bundledTracks = [
-  { url: 'https://ice5.somafm.com/groovesalad-128-mp3', title: 'Groove Salad', artist: 'SomaFM - Ambient and downtempo', mood: 'night', stream: true, key: 'demo-groovesalad' },
-  { url: 'https://ice5.somafm.com/dronezone-128-mp3', title: 'Drone Zone', artist: 'SomaFM - Deep ambient', mood: 'neon', stream: true, key: 'demo-dronezone' },
-  { url: 'https://ice5.somafm.com/spacestation-128-mp3', title: 'Space Station Soma', artist: 'SomaFM - Space music', mood: 'night', stream: true, key: 'demo-spacestation' }
-];
+const bundledTracks = [];
 let tracks = [...bundledTracks];
 let current = -1;
 let shuffleEnabled = false;
@@ -62,15 +57,7 @@ const elements = {
   libraryStatus: document.querySelector('#library-status'),
   libraryTitle: document.querySelector('#library-title'),
   libraryCopy: document.querySelector('#library-copy'),
-  installApp: document.querySelector('#install-app'),
-  addStream: document.querySelector('#add-stream'),
-  streamDialog: document.querySelector('#stream-dialog'),
-  streamForm: document.querySelector('#stream-form'),
-  streamName: document.querySelector('#stream-name'),
-  streamUrl: document.querySelector('#stream-url'),
-  studio: document.querySelector('#studio-dialog'),
-  openStudio: document.querySelector('#open-studio'),
-  topFilter: document.querySelector('#show-top')
+  installApp: document.querySelector('#install-app')
 };
 
 const visualizerContext = elements.visualizer.getContext('2d');
@@ -205,24 +192,6 @@ function trackKey(track) {
 
 function isFavorite(track) {
   return favoriteKeys.has(trackKey(track));
-}
-
-function addStream(name, url) {
-  const streamUrl = url.trim();
-  if (!/^https?:\/\//i.test(streamUrl)) {
-    setMessage('Use a full https:// stream URL.');
-    return false;
-  }
-  const key = 'stream-' + streamUrl;
-  if (tracks.some(track => trackKey(track) === key)) {
-    setMessage('That station is already in your queue.');
-    return false;
-  }
-  tracks.push({ url: streamUrl, title: name.trim() || 'Live station', artist: 'Live radio', mood: 'neon', stream: true, key });
-  renderPlaylist();
-  if (current === -1) loadTrack(0, false);
-  setMessage((name.trim() || 'Live station') + ' added as a live station.');
-  return true;
 }
 
 function formatTime(seconds) {
@@ -926,20 +895,6 @@ audio.addEventListener('error', () => {
 });
 
 document.querySelector('#add-songs').addEventListener('click', () => elements.fileInput.click());
-elements.addStream.addEventListener('click', () => elements.streamDialog.showModal());
-elements.streamForm.addEventListener('submit', event => {
-  event.preventDefault();
-  if (addStream(elements.streamName.value, elements.streamUrl.value)) {
-    elements.streamForm.reset();
-    elements.streamDialog.close();
-  }
-});
-elements.openStudio.addEventListener('click', () => elements.studio.showModal());
-elements.topFilter.addEventListener('click', () => setMessage('Top tracks will appear here after you play music.'));
-document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => {
-  const dialog = document.querySelector('#' + button.dataset.closeDialog);
-  if (dialog) dialog.close();
-}));
 elements.scanFolder.addEventListener('click', scanMusicFolder);
 elements.fileInput.addEventListener('change', () => {
   addFiles(elements.fileInput.files);

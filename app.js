@@ -233,7 +233,12 @@ async function startPlayback() {
 }
 
 function readStoredValue(key, fallback) {
-  try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; }
+  try {
+    const value = localStorage.getItem(key);
+    return value === null ? fallback : value;
+  } catch {
+    return fallback;
+  }
 }
 
 function readStoredObject(key, fallback) {
@@ -309,7 +314,7 @@ function renderStudioControls() {
 function setSleepTimer(minutes) {
   clearTimeout(sleepTimerId);
   const duration = Number(minutes) || 0;
-  sleepEndsAt = duration ? Date.now() + duration * 60_000 : 0;
+  sleepEndsAt = duration ? Date.now() + duration * 60000 : 0;
   if (!duration) {
     setMessage('Sleep timer is off.');
     return;
@@ -319,7 +324,7 @@ function setSleepTimer(minutes) {
     sleepEndsAt = 0;
     elements.sleepTimer.value = '0';
     setMessage('Sleep timer finished. Good night.');
-  }, duration * 60_000);
+  }, duration * 60000);
   setMessage(`Sleep timer set for ${duration} minutes.`);
 }
 
@@ -1307,7 +1312,7 @@ elements.trackForm.addEventListener('submit', event => {
 elements.editCover.addEventListener('change', () => {
   const file = elements.editCover.files[0];
   if (!file) return;
-  if (file.size > 750_000) {
+  if (file.size > 750000) {
     elements.coverNote.textContent = 'Please choose an image smaller than 750 KB.';
     elements.editCover.value = '';
     return;
@@ -1359,6 +1364,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=7').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=8').catch(error => console.error('Offline setup failed:', error));
   });
 }

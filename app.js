@@ -4,9 +4,13 @@ const LIBRARY_DB = 'nh48-radio-library';
 const LIBRARY_STORE = 'settings';
 const DIRECTORY_HANDLE_KEY = 'music-directory';
 
+// Official SomaFM direct streams included as a ready-to-play demo library.
 // Add permanently hosted songs here after placing the files in /songs.
-// Example: { url: 'songs/night-drive.mp3', title: 'Night Drive', artist: 'Artist', mood: 'night' }
-const bundledTracks = [];
+const bundledTracks = [
+  { url: 'https://ice5.somafm.com/groovesalad-128-mp3', title: 'Groove Salad', artist: 'SomaFM · Ambient & downtempo', mood: 'night', stream: true, key: 'demo-groovesalad' },
+  { url: 'https://ice5.somafm.com/dronezone-128-mp3', title: 'Drone Zone', artist: 'SomaFM · Deep ambient', mood: 'neon', stream: true, key: 'demo-dronezone' },
+  { url: 'https://ice5.somafm.com/spacestation-128-mp3', title: 'Space Station Soma', artist: 'SomaFM · Space music', mood: 'night', stream: true, key: 'demo-spacestation' }
+];
 const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const EQ_PRESETS = {
   Flat: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -1355,6 +1359,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=5').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=6').catch(error => console.error('Offline setup failed:', error));
   });
 }

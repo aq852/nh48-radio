@@ -1,9 +1,9 @@
-const CACHE_NAME = 'nh48-radio-shell-v6';
+const CACHE_NAME = 'nh48-radio-shell-v7';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/styles.css?v=6',
-  '/app.js?v=7',
+  '/app.js?v=8',
   '/manifest.webmanifest',
   '/icons/icon.svg',
   '/icons/icon-maskable.svg'

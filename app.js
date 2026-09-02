@@ -7,9 +7,9 @@ const DIRECTORY_HANDLE_KEY = 'music-directory';
 // Official SomaFM direct streams included as a ready-to-play demo library.
 // Add permanently hosted songs here after placing the files in /songs.
 const bundledTracks = [
-  { url: 'https://ice5.somafm.com/groovesalad-128-mp3', title: 'Groove Salad', artist: 'SomaFM · Ambient & downtempo', mood: 'night', stream: true, key: 'demo-groovesalad' },
-  { url: 'https://ice5.somafm.com/dronezone-128-mp3', title: 'Drone Zone', artist: 'SomaFM · Deep ambient', mood: 'neon', stream: true, key: 'demo-dronezone' },
-  { url: 'https://ice5.somafm.com/spacestation-128-mp3', title: 'Space Station Soma', artist: 'SomaFM · Space music', mood: 'night', stream: true, key: 'demo-spacestation' }
+  { url: 'https://ice5.somafm.com/groovesalad-128-mp3', title: 'Groove Salad', artist: 'SomaFM - Ambient and downtempo', mood: 'night', stream: true, key: 'demo-groovesalad' },
+  { url: 'https://ice5.somafm.com/dronezone-128-mp3', title: 'Drone Zone', artist: 'SomaFM - Deep ambient', mood: 'neon', stream: true, key: 'demo-dronezone' },
+  { url: 'https://ice5.somafm.com/spacestation-128-mp3', title: 'Space Station Soma', artist: 'SomaFM - Space music', mood: 'night', stream: true, key: 'demo-spacestation' }
 ];
 const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 const EQ_PRESETS = {
@@ -579,7 +579,7 @@ function setMessage(text) {
 }
 
 function shortenArtworkText(text, maximumLength = 28) {
-  return text.length > maximumLength ? `${text.slice(0, maximumLength - 1).trimEnd()}…` : text;
+  return text.length > maximumLength ? `${text.slice(0, maximumLength - 3).trimEnd()}...` : text;
 }
 
 function createMediaArtwork(track) {
@@ -648,7 +648,7 @@ function createMediaArtwork(track) {
       context.fillText(shortenArtworkText(track.artist, 36), 256, 449);
       context.fillStyle = 'rgba(255,255,255,.35)';
       context.font = '700 12px Arial, sans-serif';
-      context.fillText('NH 48 RADIO  •  AFTER DARK', 256, 483);
+      context.fillText('NH 48 RADIO - AFTER DARK', 256, 483);
 
       canvas.toBlob(blob => resolve(blob ? URL.createObjectURL(blob) : null), 'image/png');
     } catch {
@@ -889,7 +889,7 @@ function renderPlaylist() {
     item.setAttribute('aria-label', `Drag ${track.title} to reorder`);
     dragHandle.className = 'drag-handle';
     dragHandle.setAttribute('aria-hidden', 'true');
-    dragHandle.textContent = '⋮⋮';
+    dragHandle.textContent = '::';
     playButton.type = 'button';
     playButton.className = `playlist-item${index === current ? ' active' : ''}`;
     playButton.dataset.index = String(index);
@@ -1359,6 +1359,6 @@ restoreMusicFolder();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js?v=6').catch(error => console.error('Offline setup failed:', error));
+    navigator.serviceWorker.register('/sw.js?v=7').catch(error => console.error('Offline setup failed:', error));
   });
 }
